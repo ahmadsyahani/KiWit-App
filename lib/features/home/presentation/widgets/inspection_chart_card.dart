@@ -130,8 +130,9 @@ class InspectionChartCard extends StatelessWidget {
                     ),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: AppColors.primaryLight.withOpacity(0.5),
+                      color: AppColors.primaryLight.withValues(alpha: 0.5),
                     ),
+
                   ),
                 ],
               ),

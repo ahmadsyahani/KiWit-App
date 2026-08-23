@@ -81,11 +81,12 @@ class _ScanScreenState extends State<ScanScreen> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(0.4),
+                  Colors.black.withValues(alpha: 0.4),
                   Colors.transparent,
                   Colors.transparent,
-                  Colors.black.withOpacity(0.6),
+                  Colors.black.withValues(alpha: 0.6),
                 ],
+
                 stops: const [0.0, 0.2, 0.7, 1.0],
               ),
             ),
@@ -105,9 +106,10 @@ class _ScanScreenState extends State<ScanScreen> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.4),
+                          color: Colors.black.withValues(alpha: 0.4),
                           shape: BoxShape.circle,
                         ),
+
                         child: const Icon(
                           LucideIcons.x,
                           color: Colors.white,
@@ -167,9 +169,10 @@ class _ScanScreenState extends State<ScanScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.black.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(30),
                   ),
+
                   child: const Text(
                     'Tunggu Sebentar',
                     style: TextStyle(

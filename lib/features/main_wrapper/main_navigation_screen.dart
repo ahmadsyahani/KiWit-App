@@ -16,12 +16,8 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    MapScreen(),
-    ReportScreen(),
-    ProfileScreen(),
-  ];
+  // Track which tabs have been activated to lazy-load heavy widgets (e.g. Map, Charts)
+  final Set<int> _activatedTabs = {0};
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +25,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       extendBody: true,
       body: IndexedStack(
         index: _currentIndex,
-        children: _screens,
+        children: [
+          // Tab 0: Home (Always loaded first)
+          const HomeScreen(),
+
+          // Tab 1: Map (Lazy loaded only when clicked to prevent startup frame drop)
+          _activatedTabs.contains(1)
+              ? const MapScreen()
+              : const SizedBox.shrink(),
+
+          // Tab 2: Report
+          _activatedTabs.contains(2)
+              ? const ReportScreen()
+              : const SizedBox.shrink(),
+
+          // Tab 3: Profile
+          _activatedTabs.contains(3)
+              ? const ProfileScreen()
+              : const SizedBox.shrink(),
+        ],
       ),
       bottomNavigationBar: CustomBottomNav(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          if (!_activatedTabs.contains(index)) {
+            setState(() {
+              _activatedTabs.add(index);
+              _currentIndex = index;
+            });
+          } else {
+            setState(() => _currentIndex = index);
+          }
+        },
         onScanPressed: () {
           Navigator.push(
             context,
