@@ -10,6 +10,64 @@ final treeMapRepositoryProvider = Provider<TreeMapRepository>((ref) {
   return TreeMapRepository(supabase);
 });
 
+enum MapLayerType {
+  voyager(
+    name: 'Carto Voyager',
+    subtitle: 'Peta modern, jernih & bersih (Rekomendasi)',
+    urlTemplate: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+    tag: 'Rekomendasi',
+  ),
+  satellite(
+    name: 'Citra Satelit',
+    subtitle: 'Foto udara satelit resolusi tinggi',
+    urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    tag: 'Realistis',
+  ),
+  osm(
+    name: 'OpenStreetMap',
+    subtitle: 'Peta jalan standar komunitas OSM',
+    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    tag: 'Klasik',
+  ),
+  positron(
+    name: 'Minimalis Light',
+    subtitle: 'Tampilan kontras tinggi abu-abu bersih',
+    urlTemplate: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+    tag: 'Clean',
+  ),
+  dark(
+    name: 'Dark Mode (Malam)',
+    subtitle: 'Tema gelap elegan untuk malam hari',
+    urlTemplate: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+    tag: 'Gelap',
+  ),
+  terrain(
+    name: 'Topografi & Kontur',
+    subtitle: 'Garis kontur ketinggian dan kontur alam',
+    urlTemplate: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+    tag: 'Terain',
+  );
+
+  final String name;
+  final String subtitle;
+  final String urlTemplate;
+  final String tag;
+
+  const MapLayerType({
+    required this.name,
+    required this.subtitle,
+    required this.urlTemplate,
+    required this.tag,
+  });
+}
+
+/// Selected Map Layer Provider (Default to modern Voyager)
+final selectedMapLayerProvider = StateProvider<MapLayerType>((ref) => MapLayerType.voyager);
+
+/// Overlay Toggle Providers
+final showDangerZonesProvider = StateProvider<bool>((ref) => true);
+final showTreeMarkersProvider = StateProvider<bool>((ref) => true);
+
 /// Rayon Filter Provider (Defaults to logged in user's Rayon or 'Rayon 3 — Sukolilo')
 final selectedRayonFilterProvider = StateProvider<String>((ref) {
   final profile = ref.watch(userProfileProvider).value;

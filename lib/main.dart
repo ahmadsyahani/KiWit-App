@@ -8,7 +8,6 @@ import 'features/main_wrapper/main_navigation_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load environment variables & initialize Supabase
   await EnvConfig.initialize();
   await SupabaseService.initialize();
 
