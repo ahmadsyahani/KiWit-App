@@ -35,14 +35,41 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
   String _detectedRayon = '';
 
   final List<String> _commonSpecies = [
+    'Pohon Angsana',
+    'Pohon Tabebuya Kuning',
     'Pohon Trembesi',
     'Pohon Mahoni',
-    'Pohon Tabebuya Kuning',
-    'Pohon Angsana',
+    'Pohon Ketapang Kencana',
     'Pohon Flamboyan',
     'Pohon Beringin',
-    'Pohon Ketapang Kencana',
+    'Pohon Asam Jawa',
+    'Pohon Tanjung',
+    'Pohon Bungur',
+    'Pohon Kiara Payung',
   ];
+
+  final Map<String, String> _speciesCodeMap = {
+    'Pohon Angsana': 'ANG',
+    'Pohon Tabebuya Kuning': 'TAB',
+    'Pohon Trembesi': 'TRM',
+    'Pohon Mahoni': 'MAH',
+    'Pohon Ketapang Kencana': 'KTP',
+    'Pohon Flamboyan': 'FLA',
+    'Pohon Beringin': 'BRG',
+    'Pohon Asam Jawa': 'ASM',
+    'Pohon Tanjung': 'TNJ',
+    'Pohon Bungur': 'BGR',
+    'Pohon Kiara Payung': 'KPY',
+  };
+
+  final Map<String, String> _rayonCodeMap = {
+    'Rayon 1 — Genteng (Surabaya Pusat)': 'GTG',
+    'Rayon 2 — Rungkut (Surabaya Timur)': 'RKT',
+    'Rayon 3 — Sukolilo (Surabaya Timur II)': 'SKL',
+    'Rayon 4 — Sawahan (Surabaya Selatan)': 'SWH',
+    'Rayon 5 — Tandes (Surabaya Barat)': 'TDS',
+    'Rayon 6 — Kenjeran (Surabaya Utara)': 'KJR',
+  };
 
   // Koordinat Titik Pusat Rayon di Surabaya
   final Map<String, LatLng> _rayonCenters = {
@@ -57,18 +84,38 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
   @override
   void initState() {
     super.initState();
-    final randomNum = DateTime.now().millisecond;
-    _codeController = TextEditingController(text: 'TR-NEW-$randomNum');
     _speciesController = TextEditingController(text: _commonSpecies[0]);
+    _codeController = TextEditingController();
     _addressController = TextEditingController(text: 'Mendeteksi ruas jalan...');
     _conditionController = TextEditingController(text: 'Perlu verifikasi dahan & risiko tumbang');
 
     _detectedRayon = _detectRayonByCoordinates(widget.position);
+    _updateSmartTreeCode();
     _reverseGeocodePosition();
   }
 
+  void _updateSmartTreeCode({String? species, String? rayon}) {
+    final targetSpecies = species ?? _speciesController.text;
+    final targetRayon = rayon ?? (_detectedRayon.isNotEmpty ? _detectedRayon : widget.activeRayon);
+
+    String rCode = 'SKL';
+    for (final entry in _rayonCodeMap.entries) {
+      if (targetRayon.contains(entry.key.split(' — ')[0])) {
+        rCode = entry.value;
+        break;
+      }
+    }
+
+    final sCode = _speciesCodeMap[targetSpecies] ?? 'GEN';
+    final randomSeq = 100 + (DateTime.now().millisecondsSinceEpoch % 900);
+    final generatedCode = 'TR-$rCode-$sCode-$randomSeq';
+
+    setState(() {
+      _codeController.text = generatedCode;
+    });
+  }
+
   String _detectRayonByCoordinates(LatLng point) {
-    // Cari Rayon terdekat berdasarkan jarak Euclidean/Haversine
     const distanceCalculator = Distance();
     String closestRayon = _rayonCenters.keys.first;
     double minDistance = double.infinity;
@@ -111,7 +158,6 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
           final city = address['city'] ?? address['town'] ?? address['county'] ?? 'Surabaya';
           final houseNumber = address['house_number'];
 
-          // Perbaiki Rayon dari nama kecamatan/kelurahan terdeteksi
           final fullAddressText = data['display_name']?.toString().toLowerCase() ?? '';
           _detectedRayon = _determineRayonFromAddressText(fullAddressText, widget.position);
 
@@ -132,13 +178,12 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
               _addressController.text = resolvedStreet;
               _isGeocoding = false;
             });
+            _updateSmartTreeCode(rayon: _detectedRayon);
             return;
           }
         }
       }
-    } catch (_) {
-      // Fallback offline / network timeout
-    }
+    } catch (_) {}
 
     if (mounted) {
       setState(() {
@@ -147,6 +192,7 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
             'Jl. Wilayah ${_detectedRayon.split(' — ')[0]}, Surabaya (${widget.position.latitude.toStringAsFixed(4)}, ${widget.position.longitude.toStringAsFixed(4)})';
         _isGeocoding = false;
       });
+      _updateSmartTreeCode(rayon: _detectedRayon);
     }
   }
 
@@ -367,18 +413,81 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
               ),
               const SizedBox(height: 14),
 
-              // Tree Code & Rayon (Auto-Detected)
+              // 1. Jenis / Spesies Pohon Dropdown (Driver for Smart Tree Code)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: const [
+                  Text('Jenis / Spesies Pohon', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  Text(
+                    'Pilih untuk update kode',
+                    style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              DropdownButtonFormField<String>(
+                initialValue: _speciesController.text,
+                decoration: _inputDeco('').copyWith(
+                  prefixIcon: const Icon(LucideIcons.trees, color: AppColors.primary, size: 18),
+                ),
+                items: _commonSpecies.map((species) {
+                  final code = _speciesCodeMap[species] ?? 'GEN';
+                  return DropdownMenuItem<String>(
+                    value: species,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(species, style: const TextStyle(fontSize: 13.5)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Text(
+                            code,
+                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: AppColors.textMuted),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _speciesController.text = val);
+                    _updateSmartTreeCode(species: val);
+                  }
+                },
+              ),
+              const SizedBox(height: 14),
+
+              // 2. Tree Code (Auto-Generated) & Rayon (Auto-Detected)
               Row(
                 children: [
                   Expanded(
+                    flex: 3,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Kode Pohon', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                        Row(
+                          children: const [
+                            Text('Kode Pohon', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                            SizedBox(width: 4),
+                            Icon(LucideIcons.sparkles, size: 12, color: AppColors.primary),
+                          ],
+                        ),
                         const SizedBox(height: 6),
                         TextFormField(
                           controller: _codeController,
-                          decoration: _inputDeco('TR-XXX-000'),
+                          decoration: _inputDeco('TR-XXX-000').copyWith(
+                            suffixIcon: InkWell(
+                              onTap: () => _updateSmartTreeCode(),
+                              borderRadius: BorderRadius.circular(8),
+                              child: const Icon(LucideIcons.refreshCw, size: 14, color: AppColors.primary),
+                            ),
+                          ),
                           validator: (val) => val == null || val.isEmpty ? 'Kode wajib' : null,
                         ),
                       ],
@@ -386,6 +495,7 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
+                    flex: 2,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -393,31 +503,26 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
                           children: const [
                             Text('Rayon DLH', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
                             SizedBox(width: 4),
-                            Icon(LucideIcons.sparkles, size: 12, color: AppColors.primary),
+                            Icon(LucideIcons.check, size: 12, color: AppColors.primary),
                           ],
                         ),
                         const SizedBox(height: 6),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                           decoration: BoxDecoration(
                             color: AppColors.primaryLight.withValues(alpha: 0.35),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                           ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  displayRayon.split(' — ')[0],
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primaryDark,
-                                  ),
-                                ),
-                              ),
-                              const Icon(LucideIcons.check, size: 14, color: AppColors.primary),
-                            ],
+                          child: Text(
+                            displayRayon.split(' — ')[0],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primaryDark,
+                            ),
                           ),
                         ),
                       ],
@@ -427,25 +532,7 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
               ),
               const SizedBox(height: 14),
 
-              // Species Name Dropdown
-              const Text('Jenis / Spesies Pohon', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 6),
-              DropdownButtonFormField<String>(
-                initialValue: _speciesController.text,
-                decoration: _inputDeco(''),
-                items: _commonSpecies.map((species) {
-                  return DropdownMenuItem<String>(
-                    value: species,
-                    child: Text(species, style: const TextStyle(fontSize: 13.5)),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  if (val != null) setState(() => _speciesController.text = val);
-                },
-              ),
-              const SizedBox(height: 14),
-
-              // Address / Lokasi Jalan (Auto-Resolved with manual edit ability)
+              // 3. Address / Lokasi Jalan (Auto-Resolved with manual edit ability)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -478,7 +565,7 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
               ),
               const SizedBox(height: 14),
 
-              // Tingkat Risiko ISA-TRAQ
+              // 4. Tingkat Risiko ISA-TRAQ
               const Text('Tingkat Risiko Potensi Tumbang (ISA-TRAQ)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
               const SizedBox(height: 8),
               Row(
@@ -494,7 +581,7 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
               ),
               const SizedBox(height: 20),
 
-              // Submit Button
+              // 5. Submit Button
               SizedBox(
                 height: 50,
                 child: ElevatedButton(
