@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
@@ -29,6 +31,8 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
 
   RiskLevel _selectedRisk = RiskLevel.sedang;
   bool _isSubmitting = false;
+  bool _isGeocoding = true;
+  String _detectedRayon = '';
 
   final List<String> _commonSpecies = [
     'Pohon Trembesi',
@@ -40,16 +44,160 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
     'Pohon Ketapang Kencana',
   ];
 
+  // Koordinat Titik Pusat Rayon di Surabaya
+  final Map<String, LatLng> _rayonCenters = {
+    'Rayon 1 — Genteng (Surabaya Pusat)': const LatLng(-7.2620, 112.7430),
+    'Rayon 2 — Rungkut (Surabaya Timur)': const LatLng(-7.3200, 112.7720),
+    'Rayon 3 — Sukolilo (Surabaya Timur II)': const LatLng(-7.2856, 112.7915),
+    'Rayon 4 — Sawahan (Surabaya Selatan)': const LatLng(-7.2950, 112.7260),
+    'Rayon 5 — Tandes (Surabaya Barat)': const LatLng(-7.2580, 112.6780),
+    'Rayon 6 — Kenjeran (Surabaya Utara)': const LatLng(-7.2280, 112.7660),
+  };
+
   @override
   void initState() {
     super.initState();
     final randomNum = DateTime.now().millisecond;
     _codeController = TextEditingController(text: 'TR-NEW-$randomNum');
     _speciesController = TextEditingController(text: _commonSpecies[0]);
-    _addressController = TextEditingController(
-      text: 'Sekitar Lat: ${widget.position.latitude.toStringAsFixed(4)}, Lng: ${widget.position.longitude.toStringAsFixed(4)}',
-    );
+    _addressController = TextEditingController(text: 'Mendeteksi ruas jalan...');
     _conditionController = TextEditingController(text: 'Perlu verifikasi dahan & risiko tumbang');
+
+    _detectedRayon = _detectRayonByCoordinates(widget.position);
+    _reverseGeocodePosition();
+  }
+
+  String _detectRayonByCoordinates(LatLng point) {
+    // Cari Rayon terdekat berdasarkan jarak Euclidean/Haversine
+    const distanceCalculator = Distance();
+    String closestRayon = _rayonCenters.keys.first;
+    double minDistance = double.infinity;
+
+    for (final entry in _rayonCenters.entries) {
+      final dist = distanceCalculator.as(LengthUnit.Meter, point, entry.value);
+      if (dist < minDistance) {
+        minDistance = dist;
+        closestRayon = entry.key;
+      }
+    }
+    return closestRayon;
+  }
+
+  Future<void> _reverseGeocodePosition() async {
+    setState(() => _isGeocoding = true);
+
+    try {
+      final uri = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=${widget.position.latitude}&lon=${widget.position.longitude}&zoom=18&addressdetails=1',
+      );
+
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      final request = await client.getUrl(uri);
+      request.headers.set(
+        HttpHeaders.userAgentHeader,
+        'KiWit-AI/1.0 (Surabaya DLH Tree Monitor; contact@kiwit.app)',
+      );
+      final response = await request.close();
+
+      if (response.statusCode == 200) {
+        final responseBody = await response.transform(utf8.decoder).join();
+        final data = json.decode(responseBody) as Map<String, dynamic>;
+        final address = data['address'] as Map<String, dynamic>?;
+
+        if (address != null) {
+          final road = address['road'] ?? address['pedestrian'] ?? address['highway'] ?? address['suburb'];
+          final suburb = address['suburb'] ?? address['city_district'] ?? address['quarter'] ?? address['village'];
+          final city = address['city'] ?? address['town'] ?? address['county'] ?? 'Surabaya';
+          final houseNumber = address['house_number'];
+
+          // Perbaiki Rayon dari nama kecamatan/kelurahan terdeteksi
+          final fullAddressText = data['display_name']?.toString().toLowerCase() ?? '';
+          _detectedRayon = _determineRayonFromAddressText(fullAddressText, widget.position);
+
+          String resolvedStreet;
+          if (road != null && suburb != null) {
+            final numStr = houseNumber != null ? ' No. $houseNumber' : '';
+            resolvedStreet = '$road$numStr, $suburb, $city';
+          } else if (road != null) {
+            resolvedStreet = '$road, $city';
+          } else if (suburb != null) {
+            resolvedStreet = 'Jl. Sekitar $suburb, $city';
+          } else {
+            resolvedStreet = data['name'] ?? 'Wilayah $_detectedRayon, Surabaya';
+          }
+
+          if (mounted) {
+            setState(() {
+              _addressController.text = resolvedStreet;
+              _isGeocoding = false;
+            });
+            return;
+          }
+        }
+      }
+    } catch (_) {
+      // Fallback offline / network timeout
+    }
+
+    if (mounted) {
+      setState(() {
+        _detectedRayon = _detectRayonByCoordinates(widget.position);
+        _addressController.text =
+            'Jl. Wilayah ${_detectedRayon.split(' — ')[0]}, Surabaya (${widget.position.latitude.toStringAsFixed(4)}, ${widget.position.longitude.toStringAsFixed(4)})';
+        _isGeocoding = false;
+      });
+    }
+  }
+
+  String _determineRayonFromAddressText(String fullText, LatLng pos) {
+    if (fullText.contains('genteng') ||
+        fullText.contains('tegalsari') ||
+        fullText.contains('bubutan') ||
+        fullText.contains('simokerto')) {
+      return 'Rayon 1 — Genteng (Surabaya Pusat)';
+    }
+    if (fullText.contains('rungkut') ||
+        fullText.contains('gunung anyar') ||
+        fullText.contains('tenggilis')) {
+      return 'Rayon 2 — Rungkut (Surabaya Timur)';
+    }
+    if (fullText.contains('sukolilo') ||
+        fullText.contains('mulyorejo') ||
+        fullText.contains('gubeng') ||
+        fullText.contains('menur') ||
+        fullText.contains('kertajaya') ||
+        fullText.contains('its') ||
+        fullText.contains('gebang')) {
+      return 'Rayon 3 — Sukolilo (Surabaya Timur II)';
+    }
+    if (fullText.contains('sawahan') ||
+        fullText.contains('wonokromo') ||
+        fullText.contains('gayungan') ||
+        fullText.contains('jambangan') ||
+        fullText.contains('karang pilang') ||
+        fullText.contains('wiyung') ||
+        fullText.contains('darmo')) {
+      return 'Rayon 4 — Sawahan (Surabaya Selatan)';
+    }
+    if (fullText.contains('tandes') ||
+        fullText.contains('sukomanunggal') ||
+        fullText.contains('asemrowo') ||
+        fullText.contains('benowo') ||
+        fullText.contains('pakal') ||
+        fullText.contains('sambikerep') ||
+        fullText.contains('lakarsantri')) {
+      return 'Rayon 5 — Tandes (Surabaya Barat)';
+    }
+    if (fullText.contains('kenjeran') ||
+        fullText.contains('bulak') ||
+        fullText.contains('semampir') ||
+        fullText.contains('pabean') ||
+        fullText.contains('krembangan')) {
+      return 'Rayon 6 — Kenjeran (Surabaya Utara)';
+    }
+
+    return _detectRayonByCoordinates(pos);
   }
 
   @override
@@ -73,7 +221,7 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
       latitude: widget.position.latitude,
       longitude: widget.position.longitude,
       address: _addressController.text.trim(),
-      rayon: widget.activeRayon,
+      rayon: _detectedRayon.isNotEmpty ? _detectedRayon : widget.activeRayon,
       healthStatus: _conditionController.text.trim(),
       riskLevel: _selectedRisk,
       heightMeters: 12.0,
@@ -105,6 +253,8 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final displayRayon = _detectedRayon.isNotEmpty ? _detectedRayon : widget.activeRayon;
+
     return Container(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom + 24,
@@ -135,7 +285,7 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
                           color: AppColors.primaryLight,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(LucideIcons.mapPin, color: AppColors.primary, size: 20),
+                        child: const Icon(LucideIcons.mapPinPlus, color: AppColors.primary, size: 20),
                       ),
                       const SizedBox(width: 12),
                       const Text(
@@ -150,14 +300,14 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
-              // Coordinates Pill
+              // Coordinates Pill with Auto-Detect Status
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                 decoration: BoxDecoration(
                   color: AppColors.background,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppColors.border),
                 ),
                 child: Row(
@@ -165,17 +315,59 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
                     const Icon(LucideIcons.crosshair, color: AppColors.primary, size: 18),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(
-                        'Koordinat: ${widget.position.latitude.toStringAsFixed(6)}, ${widget.position.longitude.toStringAsFixed(6)}',
-                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Koordinat: ${widget.position.latitude.toStringAsFixed(6)}, ${widget.position.longitude.toStringAsFixed(6)}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  color: _isGeocoding ? Colors.amber.shade700 : AppColors.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                _isGeocoding ? 'Mendeteksi alamat & rayon...' : 'Alamat & Rayon Terdeteksi Otomatis',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: _isGeocoding ? Colors.amber.shade800 : AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
+                    if (_isGeocoding)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                      )
+                    else
+                      InkWell(
+                        onTap: _reverseGeocodePosition,
+                        borderRadius: BorderRadius.circular(8),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(LucideIcons.refreshCw, size: 14, color: AppColors.textMuted),
+                        ),
+                      ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
-              // Tree Code & Rayon
+              // Tree Code & Rayon (Auto-Detected)
               Row(
                 children: [
                   Expanded(
@@ -197,12 +389,36 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Rayon', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                        Row(
+                          children: const [
+                            Text('Rayon DLH', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                            SizedBox(width: 4),
+                            Icon(LucideIcons.sparkles, size: 12, color: AppColors.primary),
+                          ],
+                        ),
                         const SizedBox(height: 6),
-                        TextFormField(
-                          initialValue: widget.activeRayon.split(' — ')[0],
-                          readOnly: true,
-                          decoration: _inputDeco('').copyWith(fillColor: AppColors.border.withValues(alpha: 0.3)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryLight.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  displayRayon.split(' — ')[0],
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.primaryDark,
+                                  ),
+                                ),
+                              ),
+                              const Icon(LucideIcons.check, size: 14, color: AppColors.primary),
+                            ],
+                          ),
                         ),
                       ],
                     ),
@@ -217,7 +433,6 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
               DropdownButtonFormField<String>(
                 initialValue: _speciesController.text,
                 decoration: _inputDeco(''),
-
                 items: _commonSpecies.map((species) {
                   return DropdownMenuItem<String>(
                     value: species,
@@ -230,12 +445,35 @@ class _NewTreePingSheetState extends ConsumerState<NewTreePingSheet> {
               ),
               const SizedBox(height: 14),
 
-              // Address / Lokasi Jalan
-              const Text('Alamat / Ruas Jalan', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+              // Address / Lokasi Jalan (Auto-Resolved with manual edit ability)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Alamat / Ruas Jalan', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                  if (!_isGeocoding)
+                    const Text(
+                      'Bisa diedit bila ada patokan',
+                      style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+                    ),
+                ],
+              ),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _addressController,
-                decoration: _inputDeco('Contoh: Jl. Raya Kertajaya Indah'),
+                maxLines: 2,
+                decoration: _inputDeco('Contoh: Jl. Raya Kertajaya Indah No. 12').copyWith(
+                  prefixIcon: const Icon(LucideIcons.mapPin, color: AppColors.primary, size: 18),
+                  suffixIcon: _isGeocoding
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                          ),
+                        )
+                      : null,
+                ),
                 validator: (val) => val == null || val.isEmpty ? 'Alamat wajib diisi' : null,
               ),
               const SizedBox(height: 14),
