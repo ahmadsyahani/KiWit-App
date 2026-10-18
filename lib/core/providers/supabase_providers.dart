@@ -2,20 +2,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 
-/// Provider exposing the [SupabaseClient] instance for dependency injection across features.
-final supabaseClientProvider = Provider<SupabaseClient>((ref) {
-  return SupabaseService.client;
+/// Provider exposing the [SupabaseClient] instance, or null if uninitialized.
+final supabaseClientProvider = Provider<SupabaseClient?>((ref) {
+  return SupabaseService.clientOrNull;
 });
 
-/// Provider exposing the [GoTrueClient] auth instance.
-final supabaseAuthProvider = Provider<GoTrueClient>((ref) {
+/// Provider exposing the [GoTrueClient] auth instance, or null if uninitialized.
+final supabaseAuthProvider = Provider<GoTrueClient?>((ref) {
   final client = ref.watch(supabaseClientProvider);
-  return client.auth;
+  return client?.auth;
 });
 
 /// Stream provider for listening to authentication state changes in real time.
 final authStateChangesProvider = StreamProvider<AuthState>((ref) {
   final auth = ref.watch(supabaseAuthProvider);
+  if (auth == null) {
+    return const Stream.empty();
+  }
   return auth.onAuthStateChange;
 });
 
@@ -24,7 +27,7 @@ final currentUserProvider = Provider<User?>((ref) {
   // Watch stream so any login / logout triggers automatic re-evaluation
   ref.watch(authStateChangesProvider);
   final auth = ref.watch(supabaseAuthProvider);
-  return auth.currentUser;
+  return auth?.currentUser;
 });
 
 /// Reactive provider returning the current user ID, or null.

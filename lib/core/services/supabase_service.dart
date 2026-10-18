@@ -11,15 +11,29 @@ class SupabaseService {
   /// Returns true if Supabase has been initialized.
   static bool get isInitialized => _isInitialized;
 
-  /// Get the global Supabase client instance.
+  /// Get the global Supabase client instance safely, or null if uninitialized.
+  static SupabaseClient? get clientOrNull {
+    if (!_isInitialized) return null;
+    try {
+      return Supabase.instance.client;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Get the global Supabase client instance. Throws StateError if not initialized.
   static SupabaseClient get client {
-    if (!_isInitialized) {
+    final c = clientOrNull;
+    if (c == null) {
       throw StateError(
         'SupabaseService has not been initialized. Call SupabaseService.initialize() before accessing client.',
       );
     }
-    return Supabase.instance.client;
+    return c;
   }
+
+  /// Get the Supabase Auth instance safely, or null if uninitialized.
+  static GoTrueClient? get authOrNull => clientOrNull?.auth;
 
   /// Get the Supabase Auth instance.
   static GoTrueClient get auth => client.auth;
@@ -52,8 +66,7 @@ class SupabaseService {
         debugPrint('❌ [SupabaseService] Failed to initialize Supabase: $e');
         debugPrint(stackTrace.toString());
       }
-      // Re-throw or handle gracefully depending on app requirements
-      // For development robustness, we keep _isInitialized false
+      _isInitialized = false;
     }
   }
 }

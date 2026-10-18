@@ -4,15 +4,17 @@ import '../../../../core/providers/supabase_providers.dart';
 import '../../data/models/user_profile.dart';
 import '../../data/repositories/auth_repository.dart';
 
-/// Provider for AuthRepository
-final authRepositoryProvider = Provider<AuthRepository>((ref) {
+/// Provider for AuthRepository, safe if Supabase is uninitialized
+final authRepositoryProvider = Provider<AuthRepository?>((ref) {
   final supabase = ref.watch(supabaseClientProvider);
+  if (supabase == null) return null;
   return AuthRepository(supabase);
 });
 
 /// Stream provider that watches the auth state changes
 final authStateProvider = StreamProvider<AuthState>((ref) {
   final repository = ref.watch(authRepositoryProvider);
+  if (repository == null) return const Stream.empty();
   return repository.authStateChanges;
 });
 
@@ -23,6 +25,7 @@ final userProfileProvider = FutureProvider<UserProfile?>((ref) async {
   if (user == null) return null;
 
   final repository = ref.read(authRepositoryProvider);
+  if (repository == null) return null;
   return await repository.fetchUserProfile();
 });
 
@@ -36,16 +39,25 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
 
   AuthController(this._ref) : super(const AsyncValue.data(null));
 
-  AuthRepository get _authRepository => _ref.read(authRepositoryProvider);
+  AuthRepository? get _authRepository => _ref.read(authRepositoryProvider);
 
   /// Sign In with Email & Password
   Future<bool> signIn({
     required String email,
     required String password,
   }) async {
+    final repo = _authRepository;
+    if (repo == null) {
+      state = AsyncValue.error(
+        Exception('Koneksi Supabase belum siap atau sedang offline.'),
+        StackTrace.current,
+      );
+      return false;
+    }
+
     state = const AsyncValue.loading();
     try {
-      await _authRepository.signIn(email: email, password: password);
+      await repo.signIn(email: email, password: password);
       _ref.invalidate(userProfileProvider);
       state = const AsyncValue.data(null);
       return true;
@@ -65,9 +77,18 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
     String instansi = 'DLH Kota Surabaya',
     String jobTitle = 'Petugas Lapangan DLH Surabaya',
   }) async {
+    final repo = _authRepository;
+    if (repo == null) {
+      state = AsyncValue.error(
+        Exception('Koneksi Supabase belum siap atau sedang offline.'),
+        StackTrace.current,
+      );
+      return false;
+    }
+
     state = const AsyncValue.loading();
     try {
-      await _authRepository.signUp(
+      await repo.signUp(
         email: email,
         password: password,
         fullName: fullName,
@@ -87,9 +108,12 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
 
   /// Sign Out
   Future<bool> signOut() async {
+    final repo = _authRepository;
+    if (repo == null) return true;
+
     state = const AsyncValue.loading();
     try {
-      await _authRepository.signOut();
+      await repo.signOut();
       _ref.invalidate(userProfileProvider);
       state = const AsyncValue.data(null);
       return true;
@@ -101,9 +125,18 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
 
   /// Send Reset Password link
   Future<bool> resetPassword(String email) async {
+    final repo = _authRepository;
+    if (repo == null) {
+      state = AsyncValue.error(
+        Exception('Koneksi Supabase belum siap atau sedang offline.'),
+        StackTrace.current,
+      );
+      return false;
+    }
+
     state = const AsyncValue.loading();
     try {
-      await _authRepository.sendPasswordResetEmail(email);
+      await repo.sendPasswordResetEmail(email);
       state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
@@ -114,9 +147,12 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
 
   /// Update Profile Data
   Future<bool> updateProfile(UserProfile profile) async {
+    final repo = _authRepository;
+    if (repo == null) return false;
+
     state = const AsyncValue.loading();
     try {
-      await _authRepository.updateUserProfile(profile);
+      await repo.updateUserProfile(profile);
       _ref.invalidate(userProfileProvider);
       state = const AsyncValue.data(null);
       return true;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../controllers/auth_controller.dart';
+import '../widgets/auth_form_layout.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -22,6 +23,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   String _selectedRayon = 'Rayon 3 — Sukolilo';
   final String _instansi = 'DLH Kota Surabaya';
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   final List<String> _rayonOptions = [
     'Rayon 1 — Genteng / Pusat',
@@ -43,9 +45,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _handleRegister() async {
+    if (ref.read(authControllerProvider).isLoading) return;
     if (!_formKey.currentState!.validate()) return;
 
-    final success = await ref.read(authControllerProvider.notifier).signUp(
+    FocusScope.of(context).unfocus();
+
+    final success = await ref
+        .read(authControllerProvider.notifier)
+        .signUp(
           email: _emailController.text.trim(),
           password: _passwordController.text,
           fullName: _nameController.text.trim(),
@@ -62,12 +69,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
             backgroundColor: AppColors.surface,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
             title: Row(
               children: const [
-                Icon(LucideIcons.checkCircle, color: AppColors.primary, size: 28),
+                Icon(
+                  LucideIcons.checkCircle,
+                  color: AppColors.primary,
+                  size: 28,
+                ),
                 SizedBox(width: 10),
-                Text('Pendaftaran Berhasil', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Expanded(
+                  child: Text(
+                    'Pendaftaran berhasil',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ],
             ),
             content: const Text(
@@ -79,7 +97,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onPressed: () {
                   Navigator.pop(ctx); // close dialog
@@ -94,15 +114,21 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         final authState = ref.read(authControllerProvider);
         final err = authState.error;
         String errorMessage = 'Pendaftaran gagal. Silakan coba kembali.';
-        
+
         if (err != null) {
           final errStr = err.toString().toLowerCase();
-          if (errStr.contains('user already registered') || errStr.contains('already exists')) {
-            errorMessage = 'Email sudah terdaftar. Silakan langsung masuk di menu Login.';
+          if (errStr.contains('user already registered') ||
+              errStr.contains('already exists')) {
+            errorMessage =
+                'Email sudah terdaftar. Silakan langsung masuk di menu Login.';
           } else if (errStr.contains('password should be at least')) {
             errorMessage = 'Kata sandi minimal 6 karakter.';
           } else {
-            errorMessage = err.toString().replaceAll('Exception: ', '').replaceAll('AuthApiException', '').replaceAll('AuthException', '');
+            errorMessage = err
+                .toString()
+                .replaceAll('Exception: ', '')
+                .replaceAll('AuthApiException', '')
+                .replaceAll('AuthException', '');
           }
         }
 
@@ -110,7 +136,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           SnackBar(
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
             content: Row(
               children: [
                 const Icon(Icons.error_outline, color: Colors.white, size: 20),
@@ -121,238 +149,251 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           ),
         );
       }
-
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authControllerProvider);
-    final isLoading = authState.isLoading;
+    final isLoading = ref.watch(authControllerProvider).isLoading;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(LucideIcons.chevronLeft, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Daftar Petugas Baru',
-          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header Note
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+    return AuthFormLayout(
+      title: 'Buat akun\npetugas.',
+      subtitle: 'Catat setiap inspeksi, jaga pohon di wilayah Anda.',
+      onBack: isLoading ? null : () => Navigator.pop(context),
+      child: AutofillGroup(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const AuthSectionTitle(title: 'Identitas petugas',
+                subtitle: 'Data diri dan wilayah penugasan Anda.'),
+              AuthField(
+                label: 'Nama lengkap',
+                child: TextFormField(
+                  controller: _nameController,
+                  enabled: !isLoading,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.name],
+                  decoration: authInputDecoration(
+                    hint: 'Nama sesuai identitas',
+                    icon: LucideIcons.user,
                   ),
-                  child: Row(
-                    children: const [
-                      Icon(LucideIcons.shieldCheck, color: AppColors.primary, size: 24),
-                      SizedBox(width: 12),
-                      Expanded(
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Masukkan nama lengkap.'
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 18),
+              AuthField(
+                label: 'NIP / ID petugas',
+                child: TextFormField(
+                  controller: _nipController,
+                  enabled: !isLoading,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
+                  decoration: authInputDecoration(
+                    hint: 'Nomor identitas petugas',
+                    icon: LucideIcons.badgeCheck,
+                  ),
+                  validator: (value) => value == null || value.trim().isEmpty
+                      ? 'Masukkan NIP atau ID petugas.'
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 18),
+              AuthField(
+                label: 'Rayon penugasan',
+                child: DropdownButtonFormField<String>(
+                  initialValue: _selectedRayon,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
+                  isExpanded: true,
+                  isDense: false,
+                  itemHeight: null,
+                  menuMaxHeight: 360,
+                  borderRadius: BorderRadius.circular(14),
+                  decoration: authInputDecoration(
+                    hint: 'Pilih rayon',
+                    icon: LucideIcons.mapPin,
+                  ),
+                  selectedItemBuilder: (context) => _rayonOptions.map((rayon) {
+                    return Text(rayon, style: const TextStyle(fontSize: 14));
+                  }).toList(),
+                  items: _rayonOptions.map((rayon) {
+                    return DropdownMenuItem<String>(
+                      value: rayon,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
                         child: Text(
-                          'Pendaftaran akun resmi Petugas Dinas Lingkungan Hidup untuk sinkronisasi data pohon & laporan.',
-                          style: TextStyle(color: AppColors.primaryDark, fontSize: 12.5, fontWeight: FontWeight.w500),
+                          rayon,
+                          style: const TextStyle(fontSize: 14),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Form Container
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Nama Lengkap
-                      const Text('Nama Lengkap', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _nameController,
-                        textInputAction: TextInputAction.next,
-                        decoration: _inputDecoration('Contoh: Ahmad Syahani, S.Hut', LucideIcons.user),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'Nama lengkap wajib diisi' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // NIP
-                      const Text('NIP / ID Petugas', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _nipController,
-                        keyboardType: TextInputType.number,
-                        textInputAction: TextInputAction.next,
-                        decoration: _inputDecoration('19850312 201001 1 004', LucideIcons.badgeCheck),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'NIP wajib diisi' : null,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Rayon Dropdown
-                      const Text('Rayon Penugasan', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                      const SizedBox(height: 6),
-                      DropdownButtonFormField<String>(
-                        initialValue: _selectedRayon,
-                        decoration: _inputDecoration('', LucideIcons.mapPin),
-
-                        items: _rayonOptions.map((rayon) {
-                          return DropdownMenuItem<String>(
-                            value: rayon.contains('Sukolilo') ? 'Rayon 3 — Sukolilo' : rayon,
-                            child: Text(rayon, style: const TextStyle(fontSize: 14)),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          if (val != null) setState(() => _selectedRayon = val);
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Instansi (Read only)
-                      const Text('Instansi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        initialValue: _instansi,
-                        readOnly: true,
-                        decoration: _inputDecoration('', LucideIcons.building).copyWith(
-                          fillColor: AppColors.border.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Email
-                      const Text('Email Kedinasan / Aktif', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        decoration: _inputDecoration('petugas@dlh.surabaya.go.id', LucideIcons.mail),
-                        validator: (val) {
-                          if (val == null || val.trim().isEmpty) return 'Email wajib diisi';
-                          if (!val.contains('@')) return 'Format email tidak valid';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Password
-                      const Text('Password', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.next,
-                        decoration: _inputDecoration('Minimal 6 karakter', LucideIcons.lock).copyWith(
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword ? LucideIcons.eyeOff : LucideIcons.eye,
-                              color: AppColors.textMuted,
-                              size: 20,
-                            ),
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                          ),
-                        ),
-                        validator: (val) {
-                          if (val == null || val.isEmpty) return 'Password wajib diisi';
-                          if (val.length < 6) return 'Password minimal 6 karakter';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Confirm Password
-                      const Text('Konfirmasi Password', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: _confirmPasswordController,
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.done,
-                        decoration: _inputDecoration('Ulangi password', LucideIcons.lock),
-                        validator: (val) {
-                          if (val != _passwordController.text) {
-                            return 'Konfirmasi password tidak cocok';
+                    );
+                  }).toList(),
+                  onChanged: isLoading
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setState(() => _selectedRayon = value);
                           }
-                          return null;
                         },
+                ),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F6F1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.building, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _instansi,
+                        style: const TextStyle(
+                          color: AppColors.primaryDark,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Register Button
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : _handleRegister,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     ),
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                          )
-                        : const Text(
-                            'Daftarkan Akun Petugas',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 24),
-              ],
-            ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 26),
+                child: Divider(height: 1, color: Color(0xFFE4EBE5)),
+              ),
+              const AuthSectionTitle(title: 'Akses akun',
+                subtitle: 'Gunakan email aktif untuk masuk dan pemulihan akun.'),
+              AuthField(
+                label: 'Email aktif',
+                child: TextFormField(
+                  controller: _emailController,
+                  enabled: !isLoading,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.email],
+                  autocorrect: false,
+                  decoration: authInputDecoration(
+                    hint: 'nama@contoh.id',
+                    icon: LucideIcons.mail,
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Masukkan email aktif.';
+                    }
+                    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim())) {
+                      return 'Periksa kembali format email.';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(height: 18),
+              AuthField(
+                label: 'Kata sandi',
+                child: TextFormField(
+                  controller: _passwordController,
+                  enabled: !isLoading,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
+                  obscureText: _obscurePassword,
+                  keyboardType: TextInputType.visiblePassword,
+                  textInputAction: TextInputAction.next,
+                  autofillHints: const [AutofillHints.newPassword],
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: authInputDecoration(
+                    hint: 'Buat kata sandi',
+                    icon: LucideIcons.lock,
+                    helperText: 'Gunakan minimal 6 karakter.',
+                    suffixIcon: IconButton(
+                      tooltip: _obscurePassword ? 'Tampilkan kata sandi' : 'Sembunyikan kata sandi',
+                      onPressed: isLoading
+                          ? null
+                          : () => setState(() => _obscurePassword = !_obscurePassword),
+                      icon: Icon(
+                        _obscurePassword ? LucideIcons.eyeOff : LucideIcons.eye,
+                        color: const Color(0xFF5C7064),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Buat kata sandi untuk akun.';
+                    }
+                    if (value.length < 6) {
+                      return 'Kata sandi minimal 6 karakter.';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(height: 18),
+              AuthField(
+                label: 'Konfirmasi kata sandi',
+                child: TextFormField(
+                  controller: _confirmPasswordController,
+                  enabled: !isLoading,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
+                  obscureText: _obscureConfirmPassword,
+                  keyboardType: TextInputType.visiblePassword,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.newPassword],
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  onFieldSubmitted: (_) => _handleRegister(),
+                  decoration: authInputDecoration(
+                    hint: 'Ulangi kata sandi',
+                    icon: LucideIcons.lock,
+                    suffixIcon: IconButton(
+                      tooltip: _obscureConfirmPassword ? 'Tampilkan konfirmasi sandi' : 'Sembunyikan konfirmasi sandi',
+                      onPressed: isLoading
+                          ? null
+                          : () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                      icon: Icon(
+                        _obscureConfirmPassword ? LucideIcons.eyeOff : LucideIcons.eye,
+                        color: const Color(0xFF5C7064),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Ulangi kata sandi.';
+                    }
+                    if (value != _passwordController.text) {
+                      return 'Kata sandi belum sama.';
+                    }
+                    return null;
+                  },
+                ),
+              ),
+              const SizedBox(height: 26),
+              AuthPrimaryButton(
+                label: 'Buat akun petugas',
+                loadingLabel: 'Mendaftarkan akun...',
+                isLoading: isLoading,
+                onPressed: _handleRegister,
+              ),
+              const SizedBox(height: 18),
+              AuthNavigationPrompt(
+                prompt: 'Sudah punya akun?',
+                actionLabel: 'Masuk',
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+              ),
+            ],
           ),
         ),
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration(String hint, IconData icon) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13.5),
-      prefixIcon: Icon(icon, color: AppColors.textMuted, size: 20),
-      filled: true,
-      fillColor: AppColors.background,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/providers/supabase_providers.dart';
 import '../../../main_wrapper/main_navigation_screen.dart';
 import '../controllers/auth_controller.dart';
 import 'login_screen.dart';
@@ -12,6 +13,12 @@ class AuthGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final client = ref.watch(supabaseClientProvider);
+    // Jika Supabase offline / belum diinisialisasi, arahkan ke MainNavigationScreen agar tidak crash layar hitam
+    if (client == null) {
+      return const MainNavigationScreen();
+    }
+
     final authStateAsync = ref.watch(authStateProvider);
 
     return authStateAsync.when(
@@ -28,7 +35,6 @@ class AuthGate extends ConsumerWidget {
         ),
       ),
       error: (error, stackTrace) => const MainNavigationScreen(),
-
     );
   }
 }

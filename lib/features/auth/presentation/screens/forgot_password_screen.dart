@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../controllers/auth_controller.dart';
+import '../widgets/auth_form_layout.dart';
 
 class ForgotPasswordScreen extends ConsumerStatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -22,7 +23,10 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
   }
 
   Future<void> _handleReset() async {
+    if (ref.read(authControllerProvider).isLoading) return;
     if (!_formKey.currentState!.validate()) return;
+
+    FocusScope.of(context).unfocus();
 
     final success = await ref.read(authControllerProvider.notifier).resetPassword(
           _emailController.text.trim(),
@@ -39,7 +43,9 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
               children: const [
                 Icon(LucideIcons.mailCheck, color: AppColors.primary, size: 28),
                 SizedBox(width: 10),
-                Text('Email Terkirim', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Expanded(
+                  child: Text('Email terkirim', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ),
               ],
             ),
             content: Text(
@@ -78,132 +84,58 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authControllerProvider);
-    final isLoading = authState.isLoading;
+    final isLoading = ref.watch(authControllerProvider).isLoading;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(LucideIcons.chevronLeft, color: AppColors.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Reset Password',
-          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primaryLight,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(LucideIcons.keyRound, color: AppColors.primary, size: 36),
+    return AuthFormLayout(
+      title: 'Pulihkan akses',
+      subtitle: 'Kami akan mengirim tautan pemulihan ke email yang terdaftar.',
+      onBack: () => Navigator.pop(context),
+      child: AutofillGroup(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AuthField(
+                label: 'Email terdaftar',
+                child: TextFormField(
+                  controller: _emailController,
+                  enabled: !isLoading,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.done,
+                  autofillHints: const [AutofillHints.email],
+                  autocorrect: false,
+                  onFieldSubmitted: (_) => _handleReset(),
+                  decoration: authInputDecoration(
+                    hint: 'nama@contoh.id',
+                    icon: LucideIcons.mail,
                   ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Masukkan email yang terdaftar.';
+                    }
+                    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value.trim())) {
+                      return 'Periksa kembali format email.';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Lupa Kata Sandi?',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Masukkan email kedinasan Anda yang terdaftar. Kami akan mengirimkan tautan untuk mengatur ulang kata sandi Anda.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 32),
-
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Email Terdaftar',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _handleReset(),
-                        decoration: InputDecoration(
-                          hintText: 'nama@dlh.surabaya.go.id',
-                          hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 14),
-                          prefixIcon: const Icon(LucideIcons.mail, color: AppColors.textMuted, size: 20),
-                          filled: true,
-                          fillColor: AppColors.background,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: AppColors.border),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: AppColors.border),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(14),
-                            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) return 'Email wajib diisi';
-                          if (!value.contains('@')) return 'Format email tidak valid';
-                          return null;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : _handleReset,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                          )
-                        : const Text(
-                            'Kirim Tautan Reset',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 24),
+              AuthPrimaryButton(
+                label: 'Kirim tautan pemulihan',
+                loadingLabel: 'Mengirim tautan...',
+                isLoading: isLoading,
+                onPressed: _handleReset,
+              ),
+              const SizedBox(height: 18),
+              AuthNavigationPrompt(
+                prompt: 'Ingat kata sandi?',
+                actionLabel: 'Kembali masuk',
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+              ),
+            ],
           ),
         ),
       ),

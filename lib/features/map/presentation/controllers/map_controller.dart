@@ -1,116 +1,78 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/providers/supabase_providers.dart';
 import '../../../../core/widgets/risk_badge.dart';
-import '../../../auth/presentation/controllers/auth_controller.dart';
+import '../../../scan/presentation/providers/inspection_providers.dart';
 import '../../data/models/tree_map_model.dart';
 import '../../data/repositories/tree_map_repository.dart';
 
-final treeMapRepositoryProvider = Provider<TreeMapRepository>((ref) {
-  final supabase = ref.watch(supabaseClientProvider);
-  return TreeMapRepository(supabase);
-});
-
 enum MapLayerType {
   voyager(
-    name: 'Carto Voyager',
-    subtitle: 'Peta modern, jernih & bersih (Rekomendasi)',
-    urlTemplate: 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-    tag: 'Rekomendasi',
+    name: 'Standar',
+    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   ),
   satellite(
-    name: 'Citra Satelit',
-    subtitle: 'Foto udara satelit resolusi tinggi',
+    name: 'Satelit',
     urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-    tag: 'Realistis',
-  ),
-  osm(
-    name: 'OpenStreetMap',
-    subtitle: 'Peta jalan standar komunitas OSM',
-    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    tag: 'Klasik',
-  ),
-  positron(
-    name: 'Minimalis Light',
-    subtitle: 'Tampilan kontras tinggi abu-abu bersih',
-    urlTemplate: 'https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-    tag: 'Clean',
-  ),
-  dark(
-    name: 'Dark Mode (Malam)',
-    subtitle: 'Tema gelap elegan untuk malam hari',
-    urlTemplate: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-    tag: 'Gelap',
   ),
   terrain(
-    name: 'Topografi & Kontur',
-    subtitle: 'Garis kontur ketinggian dan kontur alam',
+    name: 'Topografi',
     urlTemplate: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
-    tag: 'Terain',
   );
 
-  final String name;
-  final String subtitle;
-  final String urlTemplate;
-  final String tag;
+  const MapLayerType({required this.name, required this.urlTemplate});
 
-  const MapLayerType({
-    required this.name,
-    required this.subtitle,
-    required this.urlTemplate,
-    required this.tag,
-  });
+  final String name;
+  final String urlTemplate;
 }
 
-/// Selected Map Layer Provider (Default to modern Voyager)
 final selectedMapLayerProvider = StateProvider<MapLayerType>((ref) => MapLayerType.voyager);
-
-/// Overlay Toggle Providers
-final showDangerZonesProvider = StateProvider<bool>((ref) => true);
+final highlightHighRiskProvider = StateProvider<bool>((ref) => true);
 final showTreeMarkersProvider = StateProvider<bool>((ref) => true);
 
-/// Rayon Filter Provider (Defaults to logged in user's Rayon or 'Rayon 3 — Sukolilo')
 final selectedRayonFilterProvider = StateProvider<String>((ref) {
-  final profile = ref.watch(userProfileProvider).value;
-  return profile?.rayon ?? 'Rayon 3 — Sukolilo';
+  ref.watch(currentUserIdProvider);
+  return 'Semua Rayon';
+});
+final selectedRiskFilterProvider = StateProvider<RiskLevel?>((ref) {
+  ref.watch(currentUserIdProvider);
+  return null;
+});
+final mapSearchQueryProvider = StateProvider<String>((ref) {
+  ref.watch(currentUserIdProvider);
+  return '';
 });
 
-/// Risk Filter Provider (null means 'Semua')
-final selectedRiskFilterProvider = StateProvider<RiskLevel?>((ref) => null);
-
-/// Search Query Provider
-final mapSearchQueryProvider = StateProvider<String>((ref) => '');
-
-/// Currently Selected Tree Marker on the map (for Bottom Card)
-final selectedTreeMapItemProvider = StateProvider<TreeMapModel?>((ref) => null);
-
-/// Is Ping / Add Report Mode Active?
-final isMapPingModeProvider = StateProvider<bool>((ref) => false);
-
-/// Filtered Trees Provider for the map
-final mapTreesListProvider = FutureProvider<List<TreeMapModel>>((ref) async {
-  final repository = ref.watch(treeMapRepositoryProvider);
+final mapInspectionDataProvider = Provider<AsyncValue<MapInspectionData>>((ref) {
+  final feed = ref.watch(inspectionControllerProvider);
   final rayon = ref.watch(selectedRayonFilterProvider);
   final risk = ref.watch(selectedRiskFilterProvider);
-  final search = ref.watch(mapSearchQueryProvider).toLowerCase().trim();
+  final query = ref.watch(mapSearchQueryProvider);
+  return feed.whenData((value) => const TreeMapRepository().project(
+    value.records, rayon: rayon, risk: risk, query: query,
+  ));
+});
 
-  final allTrees = await repository.fetchTrees(rayonFilter: rayon);
+final mapTreesListProvider = Provider<AsyncValue<List<TreeMapModel>>>((ref) =>
+    ref.watch(mapInspectionDataProvider).whenData((data) => data.markers));
 
-  return allTrees.where((tree) {
-    // 1. Risk Filter
-    if (risk != null && tree.riskLevel != risk) {
-      return false;
-    }
+final selectedTreeMapIdProvider = StateProvider<String?>((ref) {
+  ref.watch(currentUserIdProvider);
+  ref.watch(selectedRayonFilterProvider);
+  ref.watch(selectedRiskFilterProvider);
+  ref.watch(mapSearchQueryProvider);
+  return null;
+});
 
-    // 2. Search Filter (by treeCode, species, or address)
-    if (search.isNotEmpty) {
-      final matchCode = tree.treeCode.toLowerCase().contains(search);
-      final matchSpecies = tree.speciesName.toLowerCase().contains(search);
-      final matchAddress = tree.address.toLowerCase().contains(search);
-      if (!matchCode && !matchSpecies && !matchAddress) {
-        return false;
-      }
-    }
+final selectedTreeMapItemProvider = Provider<TreeMapModel?>((ref) {
+  final id = ref.watch(selectedTreeMapIdProvider);
+  final markers = ref.watch(mapTreesListProvider).valueOrNull;
+  for (final marker in markers ?? <TreeMapModel>[]) {
+    if (marker.id == id) return marker;
+  }
+  return null;
+});
 
-    return true;
-  }).toList();
+final mapRayonOptionsProvider = Provider<List<String>>((ref) {
+  final records = ref.watch(inspectionControllerProvider).valueOrNull?.records;
+  return inspectionRayonOptions(records ?? []);
 });

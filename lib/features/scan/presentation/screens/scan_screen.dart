@@ -1,291 +1,200 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../../data/services/scan_analyzer.dart';
+import '../../data/services/scan_camera.dart';
+import '../../data/services/scan_location_service.dart';
+import '../../domain/models/inspection_location.dart';
+import '../controllers/scan_controller.dart';
 import 'inspection_result_screen.dart';
 
 class ScanScreen extends StatefulWidget {
-  const ScanScreen({super.key});
+  const ScanScreen({this.selectedLocation, this.controller, super.key});
+  final InspectionLocation? selectedLocation;
+  /// Optional adapter-backed controller for host integration and camera-free tests.
+  final ScanController? controller;
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
-  CameraController? _controller;
-  List<CameraDescription> cameras = [];
-  bool _isInitialized = false;
+class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
+  late final ScanController _scan;
+  bool _navigating = false;
 
   @override
   void initState() {
     super.initState();
-    _initCamera();
+    WidgetsBinding.instance.addObserver(this);
+    _scan = widget.controller ?? ScanController(
+      camera: DeviceScanCamera(),
+      analyzer: OnnxPhotoAnalyzer(),
+      locationLoader: resolveScanLocation,
+      selectedLocation: widget.selectedLocation,
+    );
+    unawaited(_scan.start());
   }
 
-  Future<void> _initCamera() async {
-    try {
-      cameras = await availableCameras();
-      if (cameras.isNotEmpty) {
-        // Find the back camera
-        final backCamera = cameras.firstWhere(
-          (camera) => camera.lensDirection == CameraLensDirection.back,
-          orElse: () => cameras.first,
-        );
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _scan.setActive(state == AppLifecycleState.resumed);
+  }
 
-        _controller = CameraController(
-          backCamera,
-          ResolutionPreset.high,
-          enableAudio: false,
-        );
-
-        await _controller!.initialize();
-        if (mounted) {
-          setState(() {
-            _isInitialized = true;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error initializing camera: $e');
-    }
+  Future<void> _capture() async {
+    final result = await _scan.capture();
+    if (!mounted || result == null || _navigating) return;
+    _navigating = true;
+    // Release the native preview while the result route is replacing this page.
+    _scan.setActive(false);
+    Navigator.pushReplacement(context, MaterialPageRoute<void>(
+      builder: (_) => InspectionResultScreen(data: result),
+    ));
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _scan.dispose();
     super.dispose();
   }
 
+  String get _title => switch (_scan.stage) {
+    ScanStage.loading => 'Menyiapkan kamera…',
+    ScanStage.capturing => 'Mengambil foto…',
+    ScanStage.analyzing => 'Menganalisis foto…',
+    ScanStage.locating => 'Menyiapkan lokasi foto…',
+    ScanStage.paused => 'Kamera dijeda',
+    ScanStage.error => 'Kamera belum siap',
+    ScanStage.completed => 'Foto selesai dianalisis',
+    ScanStage.ready => 'Arahkan ke batang pohon',
+  };
+
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Camera Preview
-          if (_isInitialized && _controller != null)
-            CameraPreview(_controller!)
-          else
-            Container(
-              color: Colors.grey[900],
-              child: const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _scan,
+    builder: (context, _) => Scaffold(
+      backgroundColor: const Color(0xFF15241F),
+      body: Stack(fit: StackFit.expand, children: [
+        if (_scan.cameraReady) _scan.camera.preview(),
+        const IgnorePointer(child: DecoratedBox(decoration: BoxDecoration(
+          gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            colors: [Color(0x99000000), Colors.transparent, Color(0xCC000000)],
+            stops: [0, .35, 1]),
+        ))),
+        SafeArea(child: LayoutBuilder(builder: (context, constraints) => Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 20, 8),
+            child: Row(children: [
+              IconButton.filledTonal(
+                tooltip: 'Tutup kamera',
+                onPressed: () => Navigator.pop(context),
+                style: IconButton.styleFrom(backgroundColor: Colors.black38,
+                    foregroundColor: Colors.white, minimumSize: const Size(48, 48)),
+                icon: const Icon(Icons.close_rounded),
               ),
-            ),
-            
-          // Gradient for better visibility of UI elements
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.black.withValues(alpha: 0.4),
-                  Colors.transparent,
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.6),
-                ],
-
-                stops: const [0.0, 0.2, 0.7, 1.0],
-              ),
-            ),
+              const SizedBox(width: 12),
+              const Expanded(child: Text('Inspeksi pohon',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600))),
+            ]),
           ),
-
-          // SafeArea for UI Elements
-          SafeArea(
-            child: Column(
-              children: [
-                // Top Bar
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          shape: BoxShape.circle,
-                        ),
-
-                        child: const Icon(
-                          LucideIcons.x,
-                          color: Colors.white,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                  ),
+          Expanded(child: _scan.stage == ScanStage.error
+            ? _errorView()
+            : LayoutBuilder(builder: (context, space) => Center(
+                child: SizedBox(
+                  width: math.min(space.maxWidth * .68, 280),
+                  height: math.min(space.maxHeight * .82, 350),
+                  child: CustomPaint(painter: ScannerCornersPainter()),
                 ),
-                
-                const Spacer(),
-
-                // Scanner Frame Overlay
-                Center(
-                  child: SizedBox(
-                    width: 250,
-                    height: 350,
-                    child: CustomPaint(
-                      painter: ScannerCornersPainter(),
-                    ),
-                  ),
-                ),
-
-                const Spacer(),
-
-                // Status Pills
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Text(
-                        'Mengidentifikasi',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              )),
+          ),
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: constraints.maxHeight * .48),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Flexible(child: SingleChildScrollView(child: Column(children: [
+                Text(_title, textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-
-                  child: const Text(
-                    'Tunggu Sebentar',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 12,
+                Text(_scan.notice ?? 'Isi bingkai dengan batang pohon. Pastikan foto fokus dan cukup terang.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: _scan.notice == null ? Colors.white70 : const Color(0xFFFFDFAC),
+                      fontSize: 13, height: 1.5)),
+                const SizedBox(height: 12),
+                Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.location_on_outlined, color: Colors.white60, size: 15),
+                  const SizedBox(width: 4),
+                  Flexible(child: Text(
+                    _scan.location != null
+                      ? 'Lokasi inspeksi tercatat'
+                      : (_scan.locationPending ? 'Mencari lokasi otomatis…' : 'Lokasi bisa dilengkapi nanti'),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white60, fontSize: 12))),
+                ]),
+                ]))),
+                const SizedBox(height: 16),
+                SizedBox(width: 80, height: 80, child: DecoratedBox(
+                  decoration: BoxDecoration(shape: BoxShape.circle,
+                    border: Border.all(color: _scan.canCapture ? Colors.white : Colors.white38, width: 3)),
+                  child: Padding(padding: const EdgeInsets.all(5),
+                    child: IconButton(
+                      tooltip: 'Ambil foto',
+                      onPressed: _scan.canCapture ? _capture : null,
+                      style: IconButton.styleFrom(
+                        backgroundColor: _scan.canCapture ? AppColors.primary : Colors.white12,
+                        foregroundColor: Colors.white, disabledForegroundColor: Colors.white38),
+                      icon: _scan.busy || _scan.stage == ScanStage.loading
+                        ? const SizedBox(width: 24, height: 24,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.camera_alt_outlined, size: 30),
                     ),
                   ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Capture Button
-                GestureDetector(
-                  onTap: () {
-                    // Navigate to inspection result simulation
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const InspectionResultScreen()),
-                    );
-                  },
-                  child: Container(
-                    width: 72,
-                    height: 72,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 4,
-                      ),
-                    ),
-                    child: const Icon(
-                      LucideIcons.camera,
-                      color: Colors.white,
-                      size: 32,
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 40),
-              ],
+                )),
+              ]),
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ]))),
+      ]),
+    ),
+  );
+
+  Widget _errorView() => Center(child: SingleChildScrollView(
+    padding: const EdgeInsets.all(24),
+    child: Column(mainAxisSize: MainAxisSize.min, children: [
+      const Icon(Icons.no_photography_outlined, color: Colors.white70, size: 40),
+      const SizedBox(height: 14),
+      const Text('Akses kamera diperlukan', textAlign: TextAlign.center,
+        style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 16),
+      FilledButton.icon(
+        onPressed: () => unawaited(_scan.start()),
+        icon: const Icon(Icons.refresh_rounded), label: const Text('Coba lagi')),
+      if (_scan.settingsRequired) TextButton(
+        onPressed: () async { await openAppSettings(); },
+        child: const Text('Buka pengaturan', style: TextStyle(color: Colors.white))),
+    ]),
+  ));
 }
 
-// Custom Painter to draw only the corners of the scanner frame
 class ScannerCornersPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    const double cornerLength = 40.0;
-    const double radius = 20.0;
-
-    // Top Left
-    var path = Path();
-    path.moveTo(0, cornerLength);
-    path.lineTo(0, radius);
-    path.arcToPoint(
-      const Offset(radius, 0),
-      radius: const Radius.circular(radius),
-      clockwise: true,
-    );
-    path.lineTo(cornerLength, 0);
-    canvas.drawPath(path, paint);
-
-    // Top Right
-    path = Path();
-    path.moveTo(size.width - cornerLength, 0);
-    path.lineTo(size.width - radius, 0);
-    path.arcToPoint(
-      Offset(size.width, radius),
-      radius: const Radius.circular(radius),
-      clockwise: true,
-    );
-    path.lineTo(size.width, cornerLength);
-    canvas.drawPath(path, paint);
-
-    // Bottom Right
-    path = Path();
-    path.moveTo(size.width, size.height - cornerLength);
-    path.lineTo(size.width, size.height - radius);
-    path.arcToPoint(
-      Offset(size.width - radius, size.height),
-      radius: const Radius.circular(radius),
-      clockwise: true,
-    );
-    path.lineTo(size.width - cornerLength, size.height);
-    canvas.drawPath(path, paint);
-
-    // Bottom Left
-    path = Path();
-    path.moveTo(cornerLength, size.height);
-    path.lineTo(radius, size.height);
-    path.arcToPoint(
-      Offset(0, size.height - radius),
-      radius: const Radius.circular(radius),
-      clockwise: true,
-    );
-    path.lineTo(0, size.height - cornerLength);
+    final paint = Paint()..color = Colors.white.withValues(alpha: .9)
+      ..strokeWidth = 3..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
+    final length = math.min(30.0, math.min(size.width, size.height) / 3);
+    final path = Path()
+      ..moveTo(0, length)..lineTo(0, 12)..quadraticBezierTo(0, 0, 12, 0)..lineTo(length, 0)
+      ..moveTo(size.width - length, 0)..lineTo(size.width - 12, 0)
+      ..quadraticBezierTo(size.width, 0, size.width, 12)..lineTo(size.width, length)
+      ..moveTo(size.width, size.height - length)..lineTo(size.width, size.height - 12)
+      ..quadraticBezierTo(size.width, size.height, size.width - 12, size.height)
+      ..lineTo(size.width - length, size.height)
+      ..moveTo(length, size.height)..lineTo(12, size.height)
+      ..quadraticBezierTo(0, size.height, 0, size.height - 12)..lineTo(0, size.height - length);
     canvas.drawPath(path, paint);
   }
-
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-

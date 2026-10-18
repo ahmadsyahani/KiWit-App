@@ -6,9 +6,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:label="kiwit_app"
+        android:label="KiWit"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_kiwit"
+        android:roundIcon="@mipmap/ic_kiwit">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -23,8 +24,8 @@
                  while the Flutter UI initializes. After that, this theme continues
                  to determine the Window background behind the Flutter UI. -->
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
+              android:name="io.flutter.embedding.android.EnableImpeller"
+              android:value="false"
               />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

@@ -6,17 +6,14 @@ class UserLocationPingMarker extends StatefulWidget {
   final LatLng position;
   final VoidCallback? onTap;
 
-  const UserLocationPingMarker({
-    super.key,
-    required this.position,
-    this.onTap,
-  });
+  const UserLocationPingMarker({super.key, required this.position, this.onTap});
 
   @override
   State<UserLocationPingMarker> createState() => _UserLocationPingMarkerState();
 }
 
-class _UserLocationPingMarkerState extends State<UserLocationPingMarker> with SingleTickerProviderStateMixin {
+class _UserLocationPingMarkerState extends State<UserLocationPingMarker>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _animController;
 
   @override
@@ -64,9 +61,13 @@ class _UserLocationPingMarkerState extends State<UserLocationPingMarker> with Si
                   height: 36,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: const Color(0xFF0284C7).withValues(alpha: wave1Opacity * 0.28),
+                    color: const Color(
+                      0xFF0284C7,
+                    ).withValues(alpha: wave1Opacity * 0.28),
                     border: Border.all(
-                      color: const Color(0xFF38BDF8).withValues(alpha: wave1Opacity * 0.65),
+                      color: const Color(
+                        0xFF38BDF8,
+                      ).withValues(alpha: wave1Opacity * 0.65),
                       width: 1.5,
                     ),
                   ),
@@ -81,9 +82,13 @@ class _UserLocationPingMarkerState extends State<UserLocationPingMarker> with Si
                   height: 36,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: const Color(0xFF0284C7).withValues(alpha: wave2Opacity * 0.2),
+                    color: const Color(
+                      0xFF0284C7,
+                    ).withValues(alpha: wave2Opacity * 0.2),
                     border: Border.all(
-                      color: const Color(0xFF38BDF8).withValues(alpha: wave2Opacity * 0.45),
+                      color: const Color(
+                        0xFF38BDF8,
+                      ).withValues(alpha: wave2Opacity * 0.45),
                       width: 1.0,
                     ),
                   ),
@@ -144,48 +149,7 @@ class _UserLocationPingMarkerState extends State<UserLocationPingMarker> with Si
                 decoration: const BoxDecoration(
                   shape: BoxShape.circle,
                   color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.white,
-                      blurRadius: 3,
-                    ),
-                  ],
-                ),
-              ),
-
-              // Floating Label Badge
-              Positioned(
-                bottom: 34,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0369A1),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                    border: Border.all(color: Colors.white38, width: 0.8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(LucideIcons.radio, color: Colors.white, size: 10),
-                      SizedBox(width: 4),
-                      Text(
-                        'Posisi Anda',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                    ],
-                  ),
+                  boxShadow: [BoxShadow(color: Colors.white, blurRadius: 3)],
                 ),
               ),
             ],

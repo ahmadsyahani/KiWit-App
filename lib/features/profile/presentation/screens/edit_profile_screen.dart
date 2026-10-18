@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+
 import '../../../../core/constants/app_colors.dart';
 import '../../../auth/data/models/user_profile.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
+import '../widgets/profile_components.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
-  final UserProfile profile;
-
   const EditProfileScreen({super.key, required this.profile});
+
+  final UserProfile profile;
 
   @override
   ConsumerState<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -18,8 +20,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _nipController;
-  late String _selectedRayon;
-  late String _selectedJobTitle;
+  String? _selectedRayon;
+  String? _selectedJobTitle;
+  bool _saving = false;
 
   // Daftar Pilihan Rayon DLH Kota Surabaya (Terurut dari Rayon 1 s/d Rayon 6)
   final List<Map<String, String>> _rayonOptions = [
@@ -74,24 +77,34 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.profile.fullName);
-    _nipController = TextEditingController(text: widget.profile.nip);
-
-    // Normalize matching rayon
-    final existingRayon = widget.profile.rayon;
-    final matchedRayon = _rayonOptions.firstWhere(
-      (r) =>
-          r['title'] == existingRayon ||
-          existingRayon.contains(r['code']!) ||
-          existingRayon.contains(r['title']!.split(' — ')[0]),
-      orElse: () => _rayonOptions[2], // Default Rayon 3
+    _nipController = TextEditingController(
+      text: widget.profile.nip == '-' ? '' : widget.profile.nip,
     );
-    _selectedRayon = matchedRayon['title']!;
 
-    // Normalize matching job title
-    if (_jobTitleOptions.contains(widget.profile.jobTitle)) {
-      _selectedJobTitle = widget.profile.jobTitle;
-    } else {
-      _selectedJobTitle = _jobTitleOptions[0];
+    final existingRayon = widget.profile.rayon.trim();
+    if (existingRayon.isNotEmpty && existingRayon != '-') {
+      _selectedRayon = existingRayon;
+      for (final rayon in _rayonOptions) {
+        if (rayon['title'] == existingRayon ||
+            existingRayon.contains(rayon['code']!) ||
+            existingRayon.contains(rayon['title']!.split(' — ')[0])) {
+          _selectedRayon = rayon['title'];
+          break;
+        }
+      }
+      if (!_rayonOptions.any((option) => option['title'] == _selectedRayon)) {
+        _rayonOptions.insert(0, {
+          'title': existingRayon,
+          'desc': 'Wilayah penugasan saat ini',
+        });
+      }
+    }
+    final existingJob = widget.profile.jobTitle.trim();
+    if (existingJob.isNotEmpty && existingJob != '-') {
+      _selectedJobTitle = existingJob;
+      if (!_jobTitleOptions.contains(existingJob)) {
+        _jobTitleOptions.insert(0, existingJob);
+      }
     }
   }
 
@@ -103,414 +116,215 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   }
 
   Future<void> _handleSave() async {
+    if (_saving || ref.read(authControllerProvider).isLoading) return;
+    FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-
+    setState(() => _saving = true);
     final updated = widget.profile.copyWith(
       fullName: _nameController.text.trim(),
       nip: _nipController.text.trim(),
-      rayon: _selectedRayon,
-      jobTitle: _selectedJobTitle,
+      rayon: _selectedRayon!,
+      jobTitle: _selectedJobTitle!,
     );
-
     final success = await ref
         .read(authControllerProvider.notifier)
         .updateProfile(updated);
-
-    if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: AppColors.primary,
-            behavior: SnackBarBehavior.floating,
-            content: Row(
-              children: [
-                Icon(LucideIcons.checkCircle, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Text('Profil Petugas berhasil diperbarui!'),
-              ],
-            ),
-          ),
-        );
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-            content: const Row(
-              children: [
-                Icon(Icons.error_outline, color: Colors.white, size: 20),
-                SizedBox(width: 10),
-                Text('Gagal menyimpan perubahan ke database.'),
-              ],
-            ),
-          ),
-        );
-      }
+    if (!mounted) return;
+    setState(() => _saving = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: success ? AppColors.primary : const Color(0xFFAD3636),
+        behavior: SnackBarBehavior.floating,
+        content: Text(
+          success
+              ? 'Profil berhasil diperbarui.'
+              : 'Profil belum tersimpan. Periksa koneksi dan coba lagi.',
+        ),
+      ),
+    );
+    if (success) {
+      // Let PopScope reflect the completed save before closing this route.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.pop(context);
+      });
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final authState = ref.watch(authControllerProvider);
-    final isLoading = authState.isLoading;
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(
-            LucideIcons.chevronLeft,
-            color: AppColors.textPrimary,
-          ),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Edit Profil Petugas',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
-        ),
-        centerTitle: true,
+  Future<String?> _pickOption({
+    required String title,
+    required String? selected,
+    required List<Map<String, String>> options,
+  }) async {
+    FocusScope.of(context).unfocus();
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Avatar Header
-                Center(
-                  child: Stack(
-                    children: [
-                      Container(
-                        width: 92,
-                        height: 92,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.25),
-                              blurRadius: 16,
-                              offset: const Offset(0, 6),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          LucideIcons.user,
-                          color: Colors.white,
-                          size: 48,
-                        ),
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppColors.border,
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.08),
-                                blurRadius: 6,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            LucideIcons.camera,
-                            color: AppColors.primary,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Center(
-                  child: Text(
-                    'Identitas Resmi Petugas DLH Surabaya',
-                    style: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Card 1: Data Pokok
-                _buildSectionCard(
-                  title: 'Data Pokok Petugas',
-                  icon: LucideIcons.userCheck,
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.7,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 12, 12),
+                child: Row(
                   children: [
-                    const Text(
-                      'Nama Lengkap & Gelar',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      controller: _nameController,
-                      textInputAction: TextInputAction.next,
-                      decoration: _inputDecoration(
-                        'Contoh: Ahmad Syahani, S.Hut',
-                        LucideIcons.user,
-                      ),
-                      validator: (val) => val == null || val.trim().isEmpty
-                          ? 'Nama lengkap wajib diisi'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    const Text(
-                      'NIP / Nomor Induk Pegawai',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      controller: _nipController,
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.next,
-                      decoration: _inputDecoration(
-                        '19850312 201001 1 004',
-                        LucideIcons.badgeCheck,
-                      ),
-                      validator: (val) => val == null || val.trim().isEmpty
-                          ? 'NIP wajib diisi'
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-
-                    const Text(
-                      'Jabatan / Posisi Tugas',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    DropdownButtonFormField<String>(
-                      initialValue: _selectedJobTitle,
-                      isExpanded: true,
-                      decoration: _inputDecoration('', LucideIcons.briefcase),
-                      items: _jobTitleOptions.map((job) {
-                        return DropdownMenuItem<String>(
-                          value: job,
-                          child: Text(
-                            job,
-                            style: const TextStyle(fontSize: 13.5),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedJobTitle = val);
-                      },
+                    IconButton(
+                      tooltip: 'Tutup pilihan',
+                      onPressed: () => Navigator.pop(sheetContext),
+                      icon: const Icon(LucideIcons.x, size: 21),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-
-                // Card 2: Wilayah Penugasan (Rayon 1 - 6 Terurut Rapi)
-                _buildSectionCard(
-                  title: 'Wilayah Penugasan (Rayon DLH)',
-                  icon: LucideIcons.mapPin,
-                  children: [
-                    const Text(
-                      'Pilih Rayon Operasional Penugasan:',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // List Kartu Rayon Terurut Rapi
-                    ..._rayonOptions.map((rayon) {
-                      final isSelected = _selectedRayon == rayon['title'];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
+              ),
+              const Divider(height: 1, color: AppColors.border),
+              Expanded(
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
+                  itemCount: options.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
+                  itemBuilder: (context, index) {
+                    final option = options[index];
+                    final active = option['title'] == selected;
+                    return Semantics(
+                      selected: active,
+                      child: Material(
+                        color: active ? AppColors.primaryLight : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
                         child: InkWell(
-                          onTap: () {
-                            setState(() => _selectedRayon = rayon['title']!);
-                          },
                           borderRadius: BorderRadius.circular(16),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? AppColors.primaryLight
-                                  : AppColors.surface,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : AppColors.border,
-                                width: isSelected ? 1.8 : 1,
-                              ),
-                              boxShadow: isSelected
-                                  ? [
-                                      BoxShadow(
-                                        color: AppColors.primary.withValues(alpha: 0.08),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
+                          onTap: () =>
+                              Navigator.pop(sheetContext, option['title']),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
                             child: Row(
                               children: [
-                                // Badge Nomor Rayon (R1, R2, dll)
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? AppColors.primary
-                                        : AppColors.border.withValues(alpha: 0.7),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      rayon['code']!,
-                                      style: TextStyle(
-                                        color: isSelected ? Colors.white : AppColors.textPrimary,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-
-                                // Informasi Rayon
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        rayon['title']!,
+                                        option['title']!,
                                         style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13.5,
-                                          color: isSelected
+                                          fontSize: 14,
+                                          height: 1.5,
+                                          color: active
                                               ? AppColors.primaryDark
                                               : AppColors.textPrimary,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        rayon['desc']!,
-                                        style: TextStyle(
-                                          fontSize: 11.5,
-                                          color: isSelected
-                                              ? AppColors.primaryDark.withValues(alpha: 0.7)
-                                              : AppColors.textMuted,
+                                      if (option['desc'] != null) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          option['desc']!,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            height: 1.5,
+                                            color: profileSecondary,
+                                          ),
                                         ),
-                                      ),
+                                      ],
                                     ],
                                   ),
                                 ),
-
-                                // Radio Icon
+                                const SizedBox(width: 12),
                                 Icon(
-                                  isSelected
+                                  active
                                       ? LucideIcons.circleCheck
                                       : LucideIcons.circle,
-                                  color: isSelected
+                                  color: active
                                       ? AppColors.primary
-                                      : AppColors.textMuted,
-                                  size: 22,
+                                      : profileSecondary,
+                                  size: 21,
                                 ),
                               ],
                             ),
                           ),
                         ),
-                      );
-                    }),
-                  ],
+                      ),
+                    );
+                  },
                 ),
-                const SizedBox(height: 20),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-                // Card 3: Instansi & Akun
-                _buildSectionCard(
-                  title: 'Instansi & Akun',
-                  icon: LucideIcons.building,
-                  children: [
-                    const Text(
-                      'Instansi Kedinasan',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      initialValue: widget.profile.instansi,
-                      readOnly: true,
-                      decoration: _inputDecoration('', LucideIcons.landmark).copyWith(
-                        fillColor: AppColors.border.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    const Text(
-                      'Email Terdaftar (Tidak Dapat Diubah)',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      initialValue: widget.profile.email,
-                      readOnly: true,
-                      decoration: _inputDecoration('', LucideIcons.mail).copyWith(
-                        fillColor: AppColors.border.withValues(alpha: 0.3),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-
-                // Bottom Save CTA
-                SizedBox(
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: isLoading ? null : _handleSave,
-                    style: ElevatedButton.styleFrom(
+  @override
+  Widget build(BuildContext context) {
+    final busy = _saving || ref.watch(authControllerProvider).isLoading;
+    return PopScope(
+      canPop: !busy,
+      child: Scaffold(
+        backgroundColor: profileCanvas,
+        appBar: AppBar(
+          backgroundColor: profileCanvas,
+          surfaceTintColor: Colors.transparent,
+          centerTitle: true,
+          title: const Text(
+            'Edit profil',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          leading: IconButton(
+            tooltip: 'Kembali',
+            onPressed: busy ? null : () => Navigator.pop(context),
+            icon: const Icon(LucideIcons.chevronLeft),
+          ),
+        ),
+        bottomNavigationBar: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            border: Border(top: BorderSide(color: Color(0xFFDCE6DE))),
+          ),
+          child: SafeArea(
+            top: false,
+            minimum: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+            child: Align(
+              heightFactor: 1,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: busy ? null : _handleSave,
+                    style: FilledButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
-                      elevation: 0,
+                      disabledBackgroundColor: AppColors.primary.withValues(
+                        alpha: 0.6,
+                      ),
+                      minimumSize: const Size(0, 54),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: isLoading
+                    child: busy
                         ? const SizedBox(
                             width: 22,
                             height: 22,
@@ -520,16 +334,147 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                             ),
                           )
                         : const Text(
-                            'Simpan Perubahan Profil',
+                            'Simpan perubahan',
                             style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
                             ),
                           ),
                   ),
                 ),
-                const SizedBox(height: 30),
-              ],
+              ),
+            ),
+          ),
+        ),
+        body: SafeArea(
+          top: false,
+          bottom: false,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: AbsorbPointer(
+                  absorbing: busy,
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            ProfileAvatar(
+                              name: widget.profile.fullName,
+                              avatarUrl: widget.profile.avatarUrl,
+                            ),
+                            const SizedBox(width: 16),
+                            const Expanded(
+                              child: ProfileSectionTitle(
+                                title: 'Profil petugas',
+                                subtitle:
+                                    'Lengkapi identitas dan wilayah penugasan Anda.',
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+                        ProfileCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const ProfileSectionTitle(
+                                title: 'Identitas petugas',
+                                subtitle:
+                                    'Gunakan data sesuai identitas kedinasan.',
+                              ),
+                              const SizedBox(height: 22),
+                              _label('Nama lengkap'),
+                              TextFormField(
+                                controller: _nameController,
+                                enabled: !busy,
+                                textCapitalization: TextCapitalization.words,
+                                textInputAction: TextInputAction.next,
+                                autofillHints: const [AutofillHints.name],
+                                autovalidateMode: AutovalidateMode.onUnfocus,
+                                decoration: profileInputDecoration(
+                                  'Nama lengkap Anda',
+                                  LucideIcons.user,
+                                ),
+                                validator: (value) =>
+                                    value == null || value.trim().isEmpty
+                                    ? 'Nama lengkap wajib diisi'
+                                    : null,
+                              ),
+                              const SizedBox(height: 18),
+                              _label('Nomor Induk Pegawai'),
+                              TextFormField(
+                                controller: _nipController,
+                                enabled: !busy,
+                                keyboardType: TextInputType.number,
+                                textInputAction: TextInputAction.done,
+                                autovalidateMode: AutovalidateMode.onUnfocus,
+                                decoration: profileInputDecoration(
+                                  'Nomor induk pegawai Anda',
+                                  LucideIcons.badgeCheck,
+                                ),
+                                validator: (value) =>
+                                    value == null || value.trim().isEmpty
+                                    ? 'NIP wajib diisi'
+                                    : null,
+                              ),
+                              const SizedBox(height: 18),
+                              _label('Jabatan'),
+                              _selectionField(
+                                value: _selectedJobTitle,
+                                title: 'Pilih jabatan',
+                                icon: LucideIcons.briefcase,
+                                options: _jobTitleOptions
+                                    .map((job) => {'title': job})
+                                    .toList(),
+                                onChanged: (value) => _selectedJobTitle = value,
+                              ),
+                              const SizedBox(height: 18),
+                              _label('Wilayah penugasan'),
+                              _selectionField(
+                                value: _selectedRayon,
+                                title: 'Pilih rayon',
+                                icon: LucideIcons.mapPin,
+                                options: _rayonOptions,
+                                onChanged: (value) => _selectedRayon = value,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        ProfileCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const ProfileSectionTitle(
+                                title: 'Akun & instansi',
+                                subtitle: 'Informasi akun terdaftar.',
+                              ),
+                              ProfileDetail(
+                                icon: LucideIcons.building,
+                                label: 'Instansi',
+                                value: widget.profile.instansi,
+                              ),
+                              const Divider(height: 1, color: AppColors.border),
+                              ProfileDetail(
+                                icon: LucideIcons.mail,
+                                label: 'Email',
+                                value: widget.profile.email,
+                                last: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -537,69 +482,79 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     );
   }
 
-  Widget _buildSectionCard({
+  Widget _label(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textPrimary,
+      ),
+    ),
+  );
+
+  Widget _selectionField({
+    required String? value,
     required String title,
     required IconData icon,
-    required List<Widget> children,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: AppColors.primaryLight,
-                  shape: BoxShape.circle,
+    required List<Map<String, String>> options,
+    required ValueChanged<String> onChanged,
+  }) => FormField<String>(
+    initialValue: value,
+    validator: (value) => value == null || value.trim().isEmpty
+        ? 'Silakan ${title.toLowerCase()}.'
+        : null,
+    builder: (field) => Semantics(
+      button: true,
+      label: title,
+      value: field.value,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () async {
+            final selection = await _pickOption(
+              title: title,
+              selected: field.value,
+              options: options,
+            );
+            if (!mounted || !field.mounted || selection == null) return;
+            field.didChange(selection);
+            onChanged(selection);
+          },
+          child: InputDecorator(
+            decoration: profileInputDecoration(
+              title,
+              icon,
+            ).copyWith(errorText: field.errorText),
+            isEmpty: field.value == null,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    field.value ?? title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.5,
+                      color: field.value == null
+                          ? profileSecondary
+                          : AppColors.textPrimary,
+                    ),
+                  ),
                 ),
-                child: Icon(icon, color: AppColors.primary, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryDark,
+                const SizedBox(width: 10),
+                const Icon(
+                  LucideIcons.chevronDown,
+                  size: 18,
+                  color: profileSecondary,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
-          ...children,
-        ],
+        ),
       ),
-    );
-  }
-
-  InputDecoration _inputDecoration(String hint, IconData icon) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13.5),
-      prefixIcon: Icon(icon, color: AppColors.textMuted, size: 20),
-      filled: true,
-      fillColor: AppColors.background,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-      ),
-    );
-  }
+    ),
+  );
 }
