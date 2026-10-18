@@ -45,13 +45,83 @@ Hasil inspeksi disimpan di perangkat terlebih dahulu. Saat koneksi tersedia, dat
 ### Dari lapangan ke laporan
 
 ```mermaid
-flowchart LR
-    A[Foto batang] --> B[Validasi dan analisis]
-    B --> C[Tinjau hasil dan lokasi]
-    C --> D[Simpan di perangkat]
-    D --> E[Home · Peta · Laporan]
-    D --> F[Sinkronisasi Supabase]
-    F --> G[Perangkat lain dengan akun sama]
+flowchart TB
+    %% ==================== TAHAP 1 ====================
+    subgraph Tahap1 ["Tahap 1 — Pemindaian visual di lapangan"]
+        direction LR
+        T1_A("<b>Petugas tiba di lokasi pohon</b><br/><small>7 rayon operasional DLH Surabaya</small>")
+        T1_B("<b>Buka Flutter App</b><br/><small>Kamera minimal 12 MP + GPS aktif</small>")
+        T1_A --> T1_B
+    end
+
+    %% ==================== TAHAP 2 ====================
+    subgraph Tahap2 ["Tahap 2 — Inferensi Edge AI offline (ONNX Runtime Mobile)"]
+        direction LR
+        T2_A("<b>YOLOv11-seg</b><br/><small>Deteksi cacat: rongga,<br/>jamur, dahan menggantung</small>")
+        T2_B("<b>Mask R-CNN</b><br/><small>Estimasi DBH<br/>Ukur sudut θ batang</small>")
+        T2_C("<b>Mesin TRAQ</b><br/><small>Matriks ISA-TRAQ<br/>Hitung skor risiko awal</small>")
+        T2_A --> T2_B --> T2_C
+    end
+
+    %% ==================== PERCABANGAN ====================
+    subgraph Keputusan ["Evaluasi Hasil Inferensi"]
+        direction LR
+        AMAN("<b>Status aman</b><br/><small>Catat ke log</small>")
+        CACAT{"<b>Cacat<br/>terdeteksi?</b>"}
+        RISIKO("<b>Skor risiko</b><br/><small>Rendah–Ekstrem</small>")
+        
+        CACAT -- "Tidak" --> AMAN
+        CACAT -- "Ya" --> RISIKO
+    end
+
+    %% ==================== TAHAP 3 ====================
+    subgraph Tahap3 ["Tahap 3 — Sinkronisasi spasial ke Supabase"]
+        direction LR
+        T3_A("<b>Upload data</b><br/><small>Koordinat GPS + foto<br/>+ spesies + skor risiko</small>")
+        T3_B("<b>PostGIS kalkulasi</b><br/><small>ST_DWithin radius rebahan<br/>Geofencing zona bahaya</small>")
+        T3_C("<b>Klasifikasi final</b><br/><small>Rendah / Sedang /<br/>Tinggi / Ekstrem</small>")
+        T3_A --> T3_B --> T3_C
+    end
+
+    %% ==================== TAHAP 4 ====================
+    subgraph Tahap4 ["Tahap 4 — Visualisasi peta & respons taktis dalam aplikasi"]
+        direction LR
+        T4_A("<b>flutter_map</b><br/><small>Pin merah/kuning/hijau<br/>Peta risiko pohon</small>")
+        T4_B("<b>Push notification</b><br/><small>Weather alert cuaca ekstrem<br/>via Open-Meteo API</small>")
+        T4_C("<b>Work order digital</b><br/><small>Penugasan armada perantingan<br/>ke rayon terdekat</small>")
+        T4_A --> T4_B --> T4_C
+    end
+
+    %% ==================== INTEGRASI EKSTERNAL ====================
+    WARGA("<b>Laporan warga via Wargaku / SSW Alfa</b><br/><small>Foto → validasi AI Supabase Edge Fn → work order otomatis</small>")
+
+    %% ==================== RELASI ANTAR TAHAP ====================
+    Tahap1 --> Tahap2
+    T2_B --> CACAT
+    CACAT --> Tahap3
+    T3_B --> Tahap4
+    WARGA -. "Integrasi API dua arah" .-> T4_A
+
+    %% ==================== STYLING WARNA ====================
+    classDef stage1 fill:#e0f5ed,stroke:#6eb89f,stroke-width:1.5px,color:#0d5c46;
+    classDef stage2 fill:#eeedfc,stroke:#8e8cd8,stroke-width:1.5px,color:#312e81;
+    classDef safeNode fill:#e4f4d9,stroke:#7ab85c,stroke-width:1.5px,color:#2d5a18;
+    classDef riskNode fill:#fae5e5,stroke:#c97a7e,stroke-width:1.5px,color:#7f1d1d;
+    classDef decisionNode fill:#ffffff,stroke:#b0b0b0,stroke-width:1.5px,color:#1f2937;
+    classDef stage3 fill:#fcede4,stroke:#d49573,stroke-width:1.5px,color:#7c2d12;
+    classDef stage4 fill:#e5f2fc,stroke:#6ba5d8,stroke-width:1.5px,color:#1e3a8a;
+    classDef citizenNode fill:#faeedb,stroke:#c89e63,stroke-width:1.5px,color:#653700;
+    classDef subgraphStyle fill:transparent,stroke:#d1d5db,stroke-width:1px,stroke-dasharray: 4 4,color:#4b5563;
+
+    class T1_A,T1_B stage1;
+    class T2_A,T2_B,T2_C stage2;
+    class AMAN safeNode;
+    class RISIKO riskNode;
+    class CACAT decisionNode;
+    class T3_A,T3_B,T3_C stage3;
+    class T4_A,T4_B,T4_C stage4;
+    class WARGA citizenNode;
+    class Tahap1,Tahap2,Keputusan,Tahap3,Tahap4 subgraphStyle;
 ```
 
 Inspeksi tanpa koordinat valid tetap tersimpan dalam daftar, tetapi belum ditampilkan sebagai titik pada peta.
@@ -60,10 +130,10 @@ Inspeksi tanpa koordinat valid tetap tersimpan dalam daftar, tetapi belum ditamp
 
 | Bagian | Teknologi |
 | :--- | :--- |
-| Aplikasi | Flutter, Dart, Material 3, Plus Jakarta Sans |
+| Aplikasi | Flutter, Dart, Material 3 |
 | State | Riverpod |
 | Backend | Supabase Auth, PostgreSQL, Storage privat, Realtime |
-| Analisis foto | YOLO11 segmentation, ONNX Runtime, pemrosesan gambar di isolate |
+| Analisis foto | YOLO11 segmentation, ONNX Runtime, Image Processing |
 | Peta & GPS | Flutter Map, Geolocator, OpenStreetMap, Esri, OpenTopoMap |
 | Perangkat | Camera, Permission Handler |
 | Grafik | FL Chart |
@@ -74,7 +144,7 @@ Inspeksi tanpa koordinat valid tetap tersimpan dalam daftar, tetapi belum ditamp
 
 - Flutter dengan Dart **`>=3.12.2 <4.0.0`**, sesuai `pubspec.yaml`.
 - Android SDK yang mendukung **compile SDK 37** dan JDK **17**.
-- Perangkat Android **7.0 / API 24** atau lebih baru. Gunakan HP fisik untuk memeriksa kamera, GPS, dan inferensi model.
+- Perangkat Android **7.0 / API 24** atau lebih baru.
 - Project Supabase untuk autentikasi dan sinkronisasi.
 
 ### 1. Ambil source code
