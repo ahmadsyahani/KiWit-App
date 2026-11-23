@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/services/weather_service.dart';
 import '../../../scan/data/repositories/inspection_controller.dart';
 import '../../../scan/presentation/providers/inspection_providers.dart';
 import '../widgets/home_header.dart';
@@ -12,7 +13,8 @@ import '../widgets/inspection_chart_card.dart';
 import '../widgets/recent_inspection_list.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.weatherLoader});
+  final Future<WeatherData?> Function()? weatherLoader;
 
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
@@ -22,6 +24,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     with WidgetsBindingObserver {
   DateTime _today = DateTime.now();
   Timer? _dayTimer;
+  final _weatherKey = GlobalKey<HeroBannerCardState>();
 
   @override
   void initState() {
@@ -53,15 +56,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _refreshInspections() async {
-    if (ref.read(inspectionControllerProvider).hasError) {
-      ref.invalidate(inspectionControllerProvider);
-      return;
-    }
-    try {
-      await ref.read(inspectionControllerProvider.notifier).refresh();
-    } catch (_) {
-      // A local read failure is already visible through the provider error state.
-    }
+    await Future.wait([
+      refreshInspections(ref),
+      _weatherKey.currentState?.refreshWeather() ?? Future<void>.value(),
+    ]);
   }
 
   @override
@@ -91,16 +89,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: Row(
         children: [
           Icon(
-            feed.syncIssue != null ? Icons.cloud_off_outlined : Icons.cloud_outlined,
+            feed.syncIssue != null
+                ? Icons.cloud_off_outlined
+                : Icons.cloud_outlined,
             size: 18,
             color: AppColors.primary,
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(message, style: const TextStyle(fontSize: 12, color: AppColors.primaryDark)),
+            child: Text(
+              message,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.primaryDark,
+              ),
+            ),
           ),
           if (!feed.syncing && feed.syncIssue != null)
-            TextButton(onPressed: _refreshInspections, child: const Text('Coba lagi')),
+            TextButton(
+              onPressed: _refreshInspections,
+              child: const Text('Coba lagi'),
+            ),
         ],
       ),
     );
@@ -111,7 +120,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final inspections = ref.watch(inspectionControllerProvider);
     final inspectionWidgets = inspections.when<List<Widget>>(
       data: (feed) => [
-        if (feed.records.isNotEmpty || feed.syncIssue != null || feed.syncing) ...[
+        if (feed.recoveryIssue case final String issue)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              issue,
+              style: const TextStyle(
+                color: AppColors.riskHighText,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        if (feed.records.isNotEmpty ||
+            feed.syncIssue != null ||
+            feed.syncing) ...[
           _syncStatus(feed),
           const SizedBox(height: 16),
         ],
@@ -126,7 +148,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         ),
       ],
       error: (error, stackTrace) => [
-        const Text('Data inspeksi belum dapat dibaca.', style: TextStyle(color: AppColors.textSecondary)),
+        const Text(
+          'Data inspeksi belum dapat dibaca.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton(
@@ -148,7 +173,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             children: [
               const HomeHeader(),
               const SizedBox(height: 24),
-              const HeroBannerCard(),
+              HeroBannerCard(
+                key: _weatherKey,
+                weatherLoader: widget.weatherLoader,
+              ),
               const SizedBox(height: 24),
               ...inspectionWidgets,
               const SizedBox(height: 100),

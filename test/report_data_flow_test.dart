@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kiwit_app/core/providers/supabase_providers.dart';
+import 'package:kiwit_app/core/theme/app_theme.dart';
 import 'package:kiwit_app/features/report/presentation/providers/report_providers.dart';
 import 'package:kiwit_app/features/report/presentation/screens/report_screen.dart';
 import 'package:kiwit_app/features/report/presentation/widgets/report_tree_card.dart';
@@ -212,6 +213,7 @@ void main() {
         inspectionControllerProvider.overrideWith((ref) => controller),
       ],
       child: MaterialApp(
+        theme: AppTheme.lightTheme,
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(1.4),
@@ -224,6 +226,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Oktober 2026'), findsOneWidget);
+    expect(
+      DefaultTextStyle.of(tester.element(find.text('Oktober 2026')))
+          .style.fontFamily,
+      'Google Sans Flex',
+    );
     await tester.scrollUntilVisible(find.text('Lihat semua waktu'), 200,
       scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();

@@ -21,6 +21,18 @@ final inspectionControllerProvider = StateNotifierProvider<
   );
 });
 
+Future<void> refreshInspections(WidgetRef ref) async {
+  if (ref.read(inspectionControllerProvider).hasError) {
+    ref.invalidate(inspectionControllerProvider);
+    return;
+  }
+  try {
+    await ref.read(inspectionControllerProvider.notifier).refresh();
+  } catch (_) {
+    // The shared inspection feed exposes local read failures to the UI.
+  }
+}
+
 final inspectionPhotoUrlProvider =
     FutureProvider.autoDispose.family<String?, String>((ref, path) async {
   final remote = ref.watch(inspectionControllerProvider.notifier).remote;

@@ -98,7 +98,7 @@ class RecentInspectionList extends StatelessWidget {
                       runSpacing: 4,
                       children: [
                         Text(
-                          'Skor ${data.healthScore}/100',
+                          data.hasAssessment ? 'Skor ${data.healthScore}/100' : 'Perlu pemeriksaan manual',
                           style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold, fontSize: 12),
                         ),
                         Text(

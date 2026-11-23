@@ -1,4 +1,8 @@
 class InspectionResultData {
+  final bool hasAssessment;
+  final bool hasMeasuredDiameter;
+  final bool hasMeasuredInclination;
+  final bool hasPathologyAssessment;
   final String imagePath;
   final int healthScore;
   final String riskStatus;
@@ -14,15 +18,29 @@ class InspectionResultData {
   final double? latitude;
   final double? longitude;
 
-  // Spesifikasi AI & ISA TRAQ (requirements.md)
+  // Photo screening fields. Retained names preserve saved payload compatibility.
   final double persentaseLuka;
-  final String failurePotential; // 'Improbable', 'Possible', 'Probable', 'Imminent'
+  final String
+  failurePotential; // 'Improbable', 'Possible', 'Probable', 'Imminent'
   final String environmentalImpact; // 'Low', 'Medium', 'High'
-  final String riskAction; // 'Aman', 'Perlu Dipantau', 'Tindak Lanjuti', 'Tebang Segera!'
+  final String riskAction;
+  final bool isOfficerAssessed;
+  final String? modelRiskStatus;
+
+  // Display old records without repeating unsupported safety/felling claims.
+  String get followUpAction => switch (riskAction) {
+    'Aman' => 'Pantau kondisi',
+    'Tebang Segera!' => 'Prioritaskan pemeriksaan lapangan',
+    _ => riskAction,
+  };
   final int healthyPixelCount;
   final int defectPixelCount;
 
   InspectionResultData({
+    this.hasAssessment = true,
+    this.hasMeasuredDiameter = false,
+    this.hasMeasuredInclination = false,
+    this.hasPathologyAssessment = false,
     required this.imagePath,
     required this.healthScore,
     required this.riskStatus,
@@ -31,7 +49,7 @@ class InspectionResultData {
     required this.diameter,
     required this.isJamurPelapuk,
     required this.inspectionId,
-    this.treeSpecies = 'Pohon Mahoni',
+    this.treeSpecies = 'Belum ditentukan',
     required this.detectedCondition,
     required this.locationAddress,
     required this.scanTimestamp,
@@ -40,12 +58,45 @@ class InspectionResultData {
     double? persentaseLuka,
     this.failurePotential = 'Improbable',
     this.environmentalImpact = 'Medium',
-    this.riskAction = 'Aman',
+    this.riskAction = 'Pantau kondisi',
+    this.isOfficerAssessed = false,
+    this.modelRiskStatus,
     this.healthyPixelCount = 0,
     this.defectPixelCount = 0,
   }) : persentaseLuka = persentaseLuka ?? ronggaBatang;
 
+  factory InspectionResultData.unassessed({
+    required String imagePath,
+    required String inspectionId,
+    required String locationAddress,
+    required DateTime scanTimestamp,
+    double? latitude,
+    double? longitude,
+  }) => InspectionResultData(
+    hasAssessment: false,
+    imagePath: imagePath,
+    inspectionId: inspectionId,
+    locationAddress: locationAddress,
+    scanTimestamp: scanTimestamp,
+    latitude: latitude,
+    longitude: longitude,
+    treeSpecies: 'Belum ditentukan',
+    riskStatus: 'Belum dinilai',
+    detectedCondition: 'Belum dapat dinilai',
+    failurePotential: 'Belum dinilai',
+    riskAction: 'Perlu pemeriksaan manual',
+    // Storage-compatible placeholders; never displayed as measurements.
+    healthScore: 0,
+    ronggaBatang: 0,
+    sudutKemiringan: 0,
+    diameter: 0,
+    isJamurPelapuk: false,
+  );
+
   InspectionResultData copyWith({
+    bool? hasMeasuredDiameter,
+    bool? hasMeasuredInclination,
+    bool? hasPathologyAssessment,
     String? imagePath,
     int? healthScore,
     String? riskStatus,
@@ -64,10 +115,18 @@ class InspectionResultData {
     String? failurePotential,
     String? environmentalImpact,
     String? riskAction,
+    bool? isOfficerAssessed,
+    String? modelRiskStatus,
     int? healthyPixelCount,
     int? defectPixelCount,
   }) {
     return InspectionResultData(
+      hasAssessment: hasAssessment,
+      hasMeasuredDiameter: hasMeasuredDiameter ?? this.hasMeasuredDiameter,
+      hasMeasuredInclination:
+          hasMeasuredInclination ?? this.hasMeasuredInclination,
+      hasPathologyAssessment:
+          hasPathologyAssessment ?? this.hasPathologyAssessment,
       imagePath: imagePath ?? this.imagePath,
       healthScore: healthScore ?? this.healthScore,
       riskStatus: riskStatus ?? this.riskStatus,
@@ -86,12 +145,18 @@ class InspectionResultData {
       failurePotential: failurePotential ?? this.failurePotential,
       environmentalImpact: environmentalImpact ?? this.environmentalImpact,
       riskAction: riskAction ?? this.riskAction,
+      isOfficerAssessed: isOfficerAssessed ?? this.isOfficerAssessed,
+      modelRiskStatus: modelRiskStatus ?? this.modelRiskStatus,
       healthyPixelCount: healthyPixelCount ?? this.healthyPixelCount,
       defectPixelCount: defectPixelCount ?? this.defectPixelCount,
     );
   }
 
   Map<String, dynamic> toJson() => {
+    'hasAssessment': hasAssessment,
+    'hasMeasuredDiameter': hasMeasuredDiameter,
+    'hasMeasuredInclination': hasMeasuredInclination,
+    'hasPathologyAssessment': hasPathologyAssessment,
     'imagePath': imagePath,
     'healthScore': healthScore,
     'riskStatus': riskStatus,
@@ -110,6 +175,8 @@ class InspectionResultData {
     'failurePotential': failurePotential,
     'environmentalImpact': environmentalImpact,
     'riskAction': riskAction,
+    'isOfficerAssessed': isOfficerAssessed,
+    'modelRiskStatus': modelRiskStatus,
     'healthyPixelCount': healthyPixelCount,
     'defectPixelCount': defectPixelCount,
   };
@@ -120,6 +187,11 @@ class InspectionResultData {
       throw const FormatException('Waktu inspeksi tidak valid.');
     }
     return InspectionResultData(
+      hasAssessment: json['hasAssessment'] as bool? ?? true,
+      // Old automatically generated measurements are not verified measurements.
+      hasMeasuredDiameter: json['hasMeasuredDiameter'] as bool? ?? false,
+      hasMeasuredInclination: json['hasMeasuredInclination'] as bool? ?? false,
+      hasPathologyAssessment: json['hasPathologyAssessment'] as bool? ?? false,
       imagePath: json['imagePath'] as String? ?? '',
       healthScore: (json['healthScore'] as num).toInt(),
       riskStatus: json['riskStatus'] as String,
@@ -137,7 +209,9 @@ class InspectionResultData {
       persentaseLuka: (json['persentaseLuka'] as num?)?.toDouble(),
       failurePotential: json['failurePotential'] as String? ?? 'Improbable',
       environmentalImpact: json['environmentalImpact'] as String? ?? 'Medium',
-      riskAction: json['riskAction'] as String? ?? 'Aman',
+      riskAction: json['riskAction'] as String? ?? 'Pantau kondisi',
+      isOfficerAssessed: json['isOfficerAssessed'] as bool? ?? false,
+      modelRiskStatus: json['modelRiskStatus'] as String?,
       healthyPixelCount: (json['healthyPixelCount'] as num?)?.toInt() ?? 0,
       defectPixelCount: (json['defectPixelCount'] as num?)?.toInt() ?? 0,
     );

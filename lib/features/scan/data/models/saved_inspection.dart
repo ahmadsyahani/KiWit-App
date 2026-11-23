@@ -25,6 +25,7 @@ class SavedInspection {
   final bool isSynced;
 
   RiskLevel get riskLevel {
+    if (!data.hasAssessment) return RiskLevel.belumDinilai;
     switch (data.riskStatus.toLowerCase()) {
       case 'kritis':
       case 'ekstrem':

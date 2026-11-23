@@ -156,13 +156,32 @@ void main() {
     expect(await scan.capture(), isNotNull);
   });
 
-  test('unrecognized photo returns guidance and can be retaken', () async {
+  test('unrecognized photo proceeds without fabricated assessment', () async {
     await scan.start();
     analyzer.reject = true;
+    final result = await scan.capture();
+    expect(result, isNotNull);
+    expect(result!.hasAssessment, isFalse);
+    expect(result.riskStatus, 'Belum dinilai');
+    expect(scan.stage, ScanStage.completed);
+    expect(scan.notice, isNull);
+  });
+
+  test('weak or missing masks do not block capture; corrupt outputs still fail', () async {
+    for (final reason in [BarkRejectionReason.lowConfidence, BarkRejectionReason.insufficientMask]) {
+      await scan.start();
+      analyzer.analyzeError = BarkAnalysisRejected(reason);
+      final result = await scan.capture();
+      expect(result!.hasAssessment, isFalse);
+      expect(scan.stage, ScanStage.completed);
+    }
+    await scan.start();
+    analyzer.analyzeError = const BarkAnalysisRejected(
+      BarkRejectionReason.invalidOutput, diagnosticCode: 'SCAN-04');
     expect(await scan.capture(), isNull);
     expect(scan.canCapture, isTrue);
-    expect(scan.notice, contains('belum dikenali'));
-    analyzer.reject = false;
+    expect(scan.notice, contains('SCAN-04'));
+    analyzer.analyzeError = null;
     expect(await scan.capture(), isNotNull);
   });
 
@@ -336,18 +355,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('rejected object stays on camera without a report or save action', (tester) async {
+  testWidgets('unrecognized object opens a saveable unassessed result', (tester) async {
     analyzer.reject = true;
     final ui = ScanController(camera: camera, analyzer: analyzer,
       locationLoader: () async => null);
-    await tester.pumpWidget(MaterialApp(home: ScanScreen(controller: ui)));
+    await tester.pumpWidget(ProviderScope(child: MaterialApp(home: ScanScreen(controller: ui))));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Ambil foto'));
     await tester.pumpAndSettle();
-    expect(find.byType(ScanScreen), findsOneWidget);
-    expect(find.byType(InspectionResultScreen), findsNothing);
-    expect(ui.notice, contains('Foto belum bisa dilaporkan'));
-    expect(ui.canCapture, isTrue);
+    expect(find.byType(ScanScreen), findsNothing);
+    expect(find.byType(InspectionResultScreen), findsOneWidget);
+    expect(find.text('Kondisi belum dapat dinilai'), findsOneWidget);
+    expect(find.text('Skor kesehatan batang'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Simpan inspeksi'), 220,
+      scrollable: find.descendant(of: find.byType(InspectionResultScreen),
+        matching: find.byType(Scrollable)).first);
+    expect(find.text('Simpan inspeksi'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });

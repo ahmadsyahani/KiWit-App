@@ -3,7 +3,7 @@ import 'package:kiwit_app/core/services/onnx_service.dart';
 import 'package:kiwit_app/core/widgets/risk_badge.dart';
 
 void main() {
-  group('ISA TRAQ Requirements.md Specifications', () {
+  group('Preliminary photo screening (not a validated ISA assessment)', () {
     test('Variabel A: Potensi Kegagalan evaluation', () {
       // Rule 1: if (Persentase Luka < 10%) -> Improbable (with DBH >= 30)
       expect(
@@ -27,8 +27,11 @@ void main() {
         FailurePotential.probable,
       );
       expect(
-        IsaTraqEvaluator.evaluateFailurePotential(8.0, 20.0), // Pohon kecil DBH < 30 cm
-        FailurePotential.probable,
+        IsaTraqEvaluator.evaluateFailurePotential(
+          8.0,
+          20.0,
+        ), // Pohon kecil DBH < 30 cm
+        FailurePotential.improbable,
       );
 
       // Rule 4: if (Persentase Luka > 50%) -> Imminent
@@ -49,7 +52,7 @@ void main() {
         environmentalImpact: EnvironmentalImpact.low,
       );
       expect(r1.riskLevel, RiskLevel.rendah);
-      expect(r1.displayText, 'RISIKO RENDAH (Aman)');
+      expect(r1.displayText, 'PRIORITAS RENDAH (Pantau kondisi)');
 
       // 2. Possible + Medium -> RISIKO SEDANG (Perlu Dipantau) [Kuning]
       final r2 = IsaTraqEvaluator.evaluateMatrix(
@@ -57,7 +60,7 @@ void main() {
         environmentalImpact: EnvironmentalImpact.medium,
       );
       expect(r2.riskLevel, RiskLevel.sedang);
-      expect(r2.displayText, 'RISIKO SEDANG (Perlu Dipantau)');
+      expect(r2.displayText, 'PRIORITAS SEDANG (Perlu Dipantau)');
 
       // 3. Probable + High -> RISIKO TINGGI (Tindak Lanjuti) [Oranye]
       final r3 = IsaTraqEvaluator.evaluateMatrix(
@@ -65,7 +68,7 @@ void main() {
         environmentalImpact: EnvironmentalImpact.high,
       );
       expect(r3.riskLevel, RiskLevel.tinggi);
-      expect(r3.displayText, 'RISIKO TINGGI (Tindak Lanjuti)');
+      expect(r3.displayText, 'PRIORITAS TINGGI (Tindak Lanjuti)');
 
       // 4. Imminent + High -> RISIKO EKSTREM (Tebang Segera!) [Merah]
       final r4 = IsaTraqEvaluator.evaluateMatrix(
@@ -73,7 +76,7 @@ void main() {
         environmentalImpact: EnvironmentalImpact.high,
       );
       expect(r4.riskLevel, RiskLevel.kritis);
-      expect(r4.displayText, 'RISIKO EKSTREM (Tebang Segera!)');
+      expect(r4.displayText, 'PRIORITAS KRITIS (Periksa di lapangan)');
     });
   });
 }

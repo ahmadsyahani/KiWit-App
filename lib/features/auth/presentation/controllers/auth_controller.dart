@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/providers/supabase_providers.dart';
+import '../../../../core/services/supabase_service.dart';
 import '../../data/models/user_profile.dart';
 import '../../data/repositories/auth_repository.dart';
 
@@ -18,6 +19,10 @@ final authStateProvider = StreamProvider<AuthState>((ref) {
   return repository.authStateChanges;
 });
 
+// Keep recovery active across token refresh / userUpdated events until the
+// password form has finished. A recovery session must not open the dashboard.
+final passwordRecoveryPendingProvider = StateProvider<bool>((ref) => false);
+
 /// Reactive Provider for fetching and caching current user's profile from Supabase Database
 final userProfileProvider = FutureProvider<UserProfile?>((ref) async {
   // Watch user and auth state changes so profile updates immediately on login/logout
@@ -30,9 +35,10 @@ final userProfileProvider = FutureProvider<UserProfile?>((ref) async {
 });
 
 /// Controller for auth actions (login, register, logout, update profile)
-final authControllerProvider = StateNotifierProvider<AuthController, AsyncValue<void>>((ref) {
-  return AuthController(ref);
-});
+final authControllerProvider =
+    StateNotifierProvider<AuthController, AsyncValue<void>>((ref) {
+      return AuthController(ref);
+    });
 
 class AuthController extends StateNotifier<AsyncValue<void>> {
   final Ref _ref;
@@ -41,12 +47,20 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
 
   AuthRepository? get _authRepository => _ref.read(authRepositoryProvider);
 
+  Future<AuthRepository?> _readyRepository() async {
+    if (_authRepository != null) return _authRepository;
+    try {
+      await SupabaseService.initialize().timeout(const Duration(seconds: 10));
+    } catch (_) {
+      // A late completion still updates supabaseClientProvider through readiness.
+    }
+    return _authRepository;
+  }
+
   /// Sign In with Email & Password
-  Future<bool> signIn({
-    required String email,
-    required String password,
-  }) async {
-    final repo = _authRepository;
+  Future<bool> signIn({required String email, required String password}) async {
+    state = const AsyncValue.loading();
+    final repo = await _readyRepository();
     if (repo == null) {
       state = AsyncValue.error(
         Exception('Koneksi Supabase belum siap atau sedang offline.'),
@@ -77,7 +91,8 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
     String instansi = 'DLH Kota Surabaya',
     String jobTitle = 'Petugas Lapangan DLH Surabaya',
   }) async {
-    final repo = _authRepository;
+    state = const AsyncValue.loading();
+    final repo = await _readyRepository();
     if (repo == null) {
       state = AsyncValue.error(
         Exception('Koneksi Supabase belum siap atau sedang offline.'),
@@ -125,7 +140,8 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
 
   /// Send Reset Password link
   Future<bool> resetPassword(String email) async {
-    final repo = _authRepository;
+    state = const AsyncValue.loading();
+    final repo = await _readyRepository();
     if (repo == null) {
       state = AsyncValue.error(
         Exception('Koneksi Supabase belum siap atau sedang offline.'),
@@ -146,6 +162,20 @@ class AuthController extends StateNotifier<AsyncValue<void>> {
   }
 
   /// Update Profile Data
+  Future<bool> updatePassword(String password) async {
+    final repo = _authRepository;
+    state = const AsyncValue.loading();
+    try {
+      if (repo == null) throw const AuthException('Koneksi akun belum siap.');
+      await repo.updatePassword(password);
+      state = const AsyncValue.data(null);
+      return true;
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+      return false;
+    }
+  }
+
   Future<bool> updateProfile(UserProfile profile) async {
     final repo = _authRepository;
     if (repo == null) return false;

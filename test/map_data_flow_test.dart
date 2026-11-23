@@ -90,6 +90,8 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('1 titik inspeksi'), findsOneWidget);
+    final searchPanel = find.byType(MapSearchPanel);
+    expect(tester.getSize(searchPanel).height, lessThanOrEqualTo(56));
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.byTooltip('Tampilan peta'));
@@ -114,6 +116,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField), 'Tidak cocok');
     await tester.pumpAndSettle();
+    expect(tester.widget<MapSearchPanel>(searchPanel).hasFilter, isFalse);
     expect(find.text('Tidak ada hasil yang cocok'), findsOneWidget);
     await tester.tap(find.byTooltip('Hapus pencarian'));
     await tester.pumpAndSettle();
@@ -370,9 +373,13 @@ void main() {
     await tester.tap(find.text('Lihat detail inspeksi'));
     await tester.pumpAndSettle();
     expect(find.text('Detail inspeksi'), findsOneWidget);
-    expect(find.text(record.data.treeSpecies), findsOneWidget);
+    final detail = find.byType(SavedInspectionDetailScreen);
+    expect(tester.widget<SavedInspectionDetailScreen>(detail).record.id,
+        record.id);
+    expect(find.descendant(of: detail, matching: find.text(record.data.treeSpecies)),
+        findsWidgets);
     await tester.scrollUntilVisible(find.text(record.data.locationAddress), 240,
-      scrollable: find.descendant(of: find.byType(SavedInspectionDetailScreen),
+      scrollable: find.descendant(of: detail,
         matching: find.byType(Scrollable)).first);
     await tester.pumpAndSettle();
     expect(find.text(record.data.locationAddress), findsOneWidget);
