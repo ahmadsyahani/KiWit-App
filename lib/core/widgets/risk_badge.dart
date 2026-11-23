@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 
-enum RiskLevel { rendah, sedang, tinggi, kritis }
+enum RiskLevel { rendah, sedang, tinggi, kritis, belumDinilai }
 
 class RiskBadge extends StatelessWidget {
   final RiskLevel level;
@@ -15,6 +15,11 @@ class RiskBadge extends StatelessWidget {
     String label;
 
     switch (level) {
+      case RiskLevel.belumDinilai:
+        bg = const Color(0xFFEDF0F2);
+        text = const Color(0xFF596570);
+        label = 'Belum dinilai';
+        break;
       case RiskLevel.rendah:
         bg = AppColors.riskLowBg;
         text = AppColors.riskLowText;

@@ -3,7 +3,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
 
 /// Provider exposing the [SupabaseClient] instance, or null if uninitialized.
+final supabaseReadinessProvider = Provider<bool>((ref) {
+  // Startup has a time budget, but initialization can finish after that budget.
+  // Invalidate the cached null client when the service becomes ready.
+  void onReady() => ref.invalidateSelf();
+  SupabaseService.readiness.addListener(onReady);
+  ref.onDispose(() => SupabaseService.readiness.removeListener(onReady));
+  return SupabaseService.readiness.value;
+});
+
 final supabaseClientProvider = Provider<SupabaseClient?>((ref) {
+  ref.watch(supabaseReadinessProvider);
   return SupabaseService.clientOrNull;
 });
 

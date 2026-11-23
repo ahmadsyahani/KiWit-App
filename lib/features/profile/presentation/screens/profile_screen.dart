@@ -7,7 +7,11 @@ import '../../../../core/providers/supabase_providers.dart';
 import '../../../auth/data/models/user_profile.dart';
 import '../../../auth/presentation/controllers/auth_controller.dart';
 import '../../../auth/presentation/screens/login_screen.dart';
+import '../../../scan/data/repositories/inspection_controller.dart';
 import '../../../scan/presentation/providers/inspection_providers.dart';
+import '../../../notifications/presentation/notification_screen.dart';
+import '../../../notifications/presentation/pending_sync_screen.dart';
+import '../../../auth/presentation/screens/forgot_password_screen.dart';
 import '../widgets/profile_components.dart';
 import 'edit_profile_screen.dart';
 
@@ -80,15 +84,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _refresh() async {
     ref.invalidate(userProfileProvider);
-    if (ref.read(inspectionControllerProvider).hasError) {
-      ref.invalidate(inspectionControllerProvider);
-      return;
-    }
-    try {
-      await ref.read(inspectionControllerProvider.notifier).refresh();
-    } catch (_) {
-      // The inspection provider exposes loading and read failures in the UI.
-    }
+    await refreshInspections(ref);
   }
 
   @override
@@ -163,14 +159,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
 
     return Scaffold(
-      backgroundColor: profileCanvas,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: profileCanvas,
+        backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
-        centerTitle: true,
+        centerTitle: false,
+        titleSpacing: 20,
         title: const Text(
           'Profil',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
         ),
         leading: Navigator.canPop(context)
             ? IconButton(
@@ -179,6 +176,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 onPressed: () => Navigator.pop(context),
               )
             : null,
+        actions: [
+          if (authenticated)
+            IconButton(
+              tooltip: 'Edit profil',
+              onPressed: authBusy || profileAsync.isLoading
+                  ? null
+                  : () => _editProfile(profile),
+              icon: const Icon(
+                LucideIcons.userPen,
+                size: 21,
+                color: AppColors.primary,
+              ),
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
         top: false,
@@ -187,250 +199,125 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           onRefresh: _refresh,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 36),
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
+                constraints: const BoxConstraints(maxWidth: 600),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryDark,
-                        borderRadius: BorderRadius.circular(26),
+                    _profileHeader(context, profile, feed, authenticated),
+                    if (!authenticated) ...[
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: authBusy ? null : _login,
+                        icon: const Icon(LucideIcons.logIn, size: 18),
+                        label: const Text('Masuk ke akun'),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              ProfileAvatar(
-                                name: profile.fullName,
-                                avatarUrl: profile.avatarUrl,
-                                dark: true,
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'KiWit',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      authenticated
-                                          ? 'Akun petugas'
-                                          : 'Belum masuk akun',
-                                      style: const TextStyle(
-                                        color: Color(0xFFC7DECF),
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 22),
-                          Text(
-                            profile.fullName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 24,
-                              height: 1.25,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            profile.jobTitle,
-                            style: const TextStyle(
-                              color: Color(0xFFD1E4D7),
-                              fontSize: 13,
-                              height: 1.6,
-                            ),
-                          ),
-                          const SizedBox(height: 22),
-                          SizedBox(
-                            width: double.infinity,
-                            child: FilledButton.icon(
-                              onPressed:
-                                  authBusy ||
-                                      (authenticated && profileAsync.isLoading)
-                                  ? null
-                                  : authenticated
-                                  ? () => _editProfile(profile)
-                                  : _login,
-                              icon: Icon(
-                                authenticated
-                                    ? LucideIcons.userPen
-                                    : LucideIcons.logIn,
-                                size: 18,
-                              ),
-                              label: Text(
-                                authenticated ? 'Edit profil' : 'Masuk ke akun',
-                              ),
-                              style: FilledButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: AppColors.primaryDark,
-                                disabledBackgroundColor: const Color(
-                                  0xFFDCE6DE,
-                                ),
-                                minimumSize: const Size(0, 48),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 14,
-                                ),
-                                textStyle: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 14,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                     const SizedBox(height: 24),
-                    const ProfileSectionTitle(
-                      title: 'Aktivitas inspeksi',
-                      subtitle: 'Ringkasan hasil inspeksi yang Anda simpan.',
-                    ),
-                    const SizedBox(height: 12),
-                    ProfileCard(
-                      child: Column(
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: _metric(
-                                  icon: LucideIcons.trees,
-                                  value: feed == null
-                                      ? '—'
-                                      : '${feed.records.length}',
-                                  label: 'Inspeksi tersimpan',
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _metric(
-                                  icon: authenticated
-                                      ? LucideIcons.cloudCheck
-                                      : LucideIcons.smartphone,
-                                  value: feed == null
-                                      ? '—'
-                                      : authenticated
-                                      ? '${feed.records.where((record) => record.isSynced).length}'
-                                      : '${feed.records.length}',
-                                  label: authenticated
-                                      ? 'Tersinkron'
-                                      : 'Di perangkat ini',
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 18),
-                            child: Divider(height: 1, color: AppColors.border),
-                          ),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(syncIcon, color: profileSecondary, size: 19),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      syncTitle,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      syncDescription,
-                                      style: const TextStyle(
-                                        color: profileSecondary,
-                                        fontSize: 12,
-                                        height: 1.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
                     if (authenticated) ...[
-                      const SizedBox(height: 24),
-                      const ProfileSectionTitle(
-                        title: 'Informasi akun',
-                        subtitle: 'Identitas dan wilayah penugasan Anda.',
-                      ),
-                      const SizedBox(height: 12),
-                      ProfileCard(
+                      _sectionTitle('Informasi akun'),
+                      Container(
+                        decoration: _cardDecoration(),
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                         child: Column(
                           children: [
                             if (profileAsync.isLoading)
-                              const LinearProgressIndicator(
-                                minHeight: 2,
-                                color: AppColors.primary,
-                              ),
+                              const LinearProgressIndicator(minHeight: 2),
                             if (profileAsync.hasError)
-                              const Text(
-                                'Profil belum dapat diperbarui. Menampilkan informasi akun yang tersedia.',
-                                style: TextStyle(
-                                  color: profileSecondary,
-                                  fontSize: 12,
-                                  height: 1.5,
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Text(
+                                  'Profil belum dapat diperbarui. Menampilkan informasi akun yang tersedia.',
+                                  style: TextStyle(
+                                    color: profileSecondary,
+                                    fontSize: 12,
+                                    height: 1.5,
+                                  ),
                                 ),
                               ),
-                            ProfileDetail(
-                              icon: LucideIcons.mail,
-                              label: 'Email',
-                              value: profile.email,
-                            ),
-                            const Divider(height: 1, color: AppColors.border),
-                            ProfileDetail(
-                              icon: LucideIcons.badgeCheck,
-                              label: 'NIP',
-                              value: profile.nip,
-                            ),
-                            const Divider(height: 1, color: AppColors.border),
-                            ProfileDetail(
-                              icon: LucideIcons.mapPin,
-                              label: 'Wilayah penugasan',
-                              value: profile.rayon,
-                            ),
-                            const Divider(height: 1, color: AppColors.border),
-                            ProfileDetail(
-                              icon: LucideIcons.building,
-                              label: 'Instansi',
-                              value: profile.instansi,
-                              last: true,
-                            ),
+                            _accountRow('NIP', profile.nip),
+                            _accountRow('Rayon', profile.rayon),
+                            _accountRow('Instansi', profile.instansi),
+                            _accountRow('Email', profile.email, last: true),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 26),
+                    ],
+                    _sectionTitle('Aktivitas dan keamanan'),
+                    Container(
+                      decoration: _cardDecoration(),
+                      child: Column(
+                        children: [
+                          _actionTile(
+                            icon: LucideIcons.bell,
+                            title: 'Notifikasi inspeksi',
+                            subtitle: 'Risiko dan pembaruan laporan',
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => const NotificationScreen(),
+                              ),
+                            ),
+                          ),
+                          const Divider(
+                            height: 1,
+                            indent: 60,
+                            endIndent: 16,
+                            color: AppColors.border,
+                          ),
+                          _actionTile(
+                            icon: syncIcon,
+                            title: syncTitle,
+                            subtitle: syncDescription,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute<void>(
+                                builder: (_) => const PendingSyncScreen(),
+                              ),
+                            ),
+                          ),
+                          if (authenticated) ...[
+                            const Divider(
+                              height: 1,
+                              indent: 60,
+                              endIndent: 16,
+                              color: AppColors.border,
+                            ),
+                            _actionTile(
+                              icon: LucideIcons.lockKeyhole,
+                              title: 'Atur ulang kata sandi',
+                              subtitle: 'Kirim tautan pemulihan melalui email',
+                              onTap: authBusy
+                                  ? null
+                                  : () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute<void>(
+                                        builder: (_) =>
+                                            const ForgotPasswordScreen(),
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    if (feed?.recoveryIssue case final String issue)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          issue,
+                          style: const TextStyle(
+                            color: AppColors.riskHighText,
+                            fontSize: 12,
+                            height: 1.5,
+                          ),
+                        ),
+                      ),
+                    if (authenticated) ...[
+                      const SizedBox(height: 26),
                       FilledButton.icon(
                         onPressed: authBusy
                             ? null
@@ -442,7 +329,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFFAD3636),
                           foregroundColor: Colors.white,
-                          minimumSize: const Size(0, 52),
+                          minimumSize: const Size(0, 50),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 14,
@@ -463,35 +350,224 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  Widget _metric({
-    required IconData icon,
-    required String value,
-    required String label,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, color: AppColors.primary, size: 21),
-        const SizedBox(height: 12),
-        Text(
-          value,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            height: 1.2,
+  Widget _profileHeader(
+    BuildContext context,
+    UserProfile profile,
+    InspectionFeed? feed,
+    bool authenticated,
+  ) {
+    final stacked = MediaQuery.textScalerOf(context).scale(22) > 32;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Flex(
+            direction: stacked ? Axis.vertical : Axis.horizontal,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ProfileAvatar(
+                name: profile.fullName,
+                avatarUrl: profile.avatarUrl,
+                circular: true,
+                dark: true,
+              ),
+              const SizedBox(width: 14, height: 14),
+              Flexible(
+                flex: stacked ? 0 : 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.fullName,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      profile.jobTitle,
+                      style: const TextStyle(
+                        color: AppColors.primaryLight,
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          label,
-          style: const TextStyle(
-            color: profileSecondary,
-            fontSize: 12,
-            height: 1.5,
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: Colors.white38),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _metric(
+                  value: feed?.records.length,
+                  label: authenticated
+                      ? 'Inspeksi tersimpan'
+                      : 'Inspeksi di perangkat ini',
+                ),
+              ),
+              if (authenticated) ...[
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _metric(
+                    value: feed == null
+                        ? null
+                        : feed.records.length - feed.pendingCount,
+                    label: 'Tersinkron',
+                  ),
+                ),
+              ],
+            ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
+
+  BoxDecoration _cardDecoration() => BoxDecoration(
+    color: Colors.white,
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: AppColors.border),
+  );
+
+  Widget _sectionTitle(String text) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(
+      text,
+      style: const TextStyle(
+        color: AppColors.textPrimary,
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
+
+  Widget _metric({required int? value, required String label}) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        value?.toString() ?? '...',
+        style: const TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.w700,
+          height: 1.15,
+          color: Colors.white,
+        ),
+      ),
+      const SizedBox(height: 5),
+      Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          height: 1.5,
+          color: AppColors.primaryLight,
+        ),
+      ),
+    ],
+  );
+
+  Widget _accountRow(String label, String value, {bool last = false}) =>
+      Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          border: last
+              ? null
+              : const Border(bottom: BorderSide(color: AppColors.divider)),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stacked =
+                constraints.maxWidth < 300 ||
+                MediaQuery.textScalerOf(context).scale(12) > 16;
+            final labelWidget = Text(
+              label,
+              style: const TextStyle(fontSize: 13, color: profileSecondary),
+            );
+            final valueWidget = Text(
+              value.trim().isEmpty || value == '-' ? 'Belum diisi' : value,
+              textAlign: stacked ? TextAlign.start : TextAlign.end,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.5,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
+              ),
+            );
+            return stacked
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      labelWidget,
+                      const SizedBox(height: 5),
+                      valueWidget,
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 2, child: labelWidget),
+                      const SizedBox(width: 12),
+                      Expanded(flex: 5, child: valueWidget),
+                    ],
+                  );
+          },
+        ),
+      );
+
+  Widget _actionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback? onTap,
+  }) => Material(
+    color: Colors.transparent,
+    borderRadius: BorderRadius.circular(16),
+    clipBehavior: Clip.antiAlias,
+    child: ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      leading: Container(
+        width: 34,
+        height: 38,
+        decoration: BoxDecoration(
+          color: AppColors.primaryLight,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, size: 18, color: AppColors.primary),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: Text(
+          subtitle,
+          style: const TextStyle(
+            fontSize: 12,
+            height: 1.5,
+            color: profileSecondary,
+          ),
+        ),
+      ),
+      trailing: const Icon(
+        LucideIcons.chevronRight,
+        size: 17,
+        color: profileSecondary,
+      ),
+      onTap: onTap,
+    ),
+  );
 }

@@ -95,7 +95,10 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
     FocusScope.of(context).unfocus();
     final account = ref.read(currentUserIdProvider);
     final selection = await showModalBottomSheet<(ReportPeriod, DateTime)>(
-      context: context, useSafeArea: true, showDragHandle: true, isScrollControlled: true,
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      isScrollControlled: true,
       backgroundColor: Colors.white,
       builder: (_) => ReportPeriodSheet(
         period: ref.read(reportPeriodProvider),
@@ -103,13 +106,20 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
         now: ref.read(reportNowProvider),
       ),
     );
-    if (!mounted || selection == null || account != ref.read(currentUserIdProvider)) return;
+    if (!mounted ||
+        selection == null ||
+        account != ref.read(currentUserIdProvider)) {
+      return;
+    }
     ref.read(reportCustomDateProvider.notifier).state = selection.$2;
     ref.read(reportPeriodProvider.notifier).state = selection.$1;
   }
 
   void _startScan() {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanScreen()));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ScanScreen()),
+    );
   }
 
   @override
@@ -126,9 +136,13 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
     final guest = ref.watch(currentUserIdProvider) == null;
     final data = dataAsync.valueOrNull;
     final feed = feedAsync.valueOrNull;
-    final unresolvedCloud = !guest && feed != null && feed.records.isEmpty &&
+    final unresolvedCloud =
+        !guest &&
+        feed != null &&
+        feed.records.isEmpty &&
         (feed.syncing || feed.syncIssue != null);
-    final summaryLoading = data == null || dataAsync.hasError || unresolvedCloud;
+    final summaryLoading =
+        data == null || dataAsync.hasError || unresolvedCloud;
 
     ref.listen(currentUserIdProvider, (_, _) {
       _searchController.clear();
@@ -138,13 +152,14 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Laporan', style: TextStyle(
-          fontSize: 18, fontWeight: FontWeight.w700,
-        )),
-        centerTitle: true,
+        title: const Text(
+          'Laporan',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+        ),
+        centerTitle: false,
+        titleSpacing: 20,
         backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
-
       ),
       body: SafeArea(
         top: false,
@@ -156,7 +171,8 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
               onRefresh: _refresh,
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 slivers: [
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -164,125 +180,205 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(guest ? 'Inspeksi perangkat ini' : 'Riwayat inspeksi Anda',
-                            style: const TextStyle(fontSize: 12, color: Color(0xFF5C7064))),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            alignment: WrapAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                guest
+                                    ? 'Inspeksi perangkat ini'
+                                    : 'Riwayat inspeksi Anda',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF5C7064),
+                                ),
+                              ),
+                              _periodButton(periodLabel),
+                            ],
+                          ),
                           const SizedBox(height: 14),
                           MonthlySummaryCard(
                             inspectedCount: data?.inspectedCount ?? 0,
                             criticalCount: data?.criticalCount ?? 0,
                             highCount: data?.highCount ?? 0,
                             pendingSyncCount: data?.pendingCount ?? 0,
-                            periodLabel: period == ReportPeriod.currentMonth ? 'Bulan ini' : periodLabel,
+                            periodLabel: period == ReportPeriod.currentMonth
+                                ? 'Bulan ini'
+                                : periodLabel,
                             loading: summaryLoading,
                           ),
                           const SizedBox(height: 12),
                           if (feed != null) _syncStatus(feed, guest),
+                          if (feed?.recoveryIssue case final String issue)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                issue,
+                                style: const TextStyle(
+                                  color: AppColors.riskHighText,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
                           const SizedBox(height: 24),
                           Row(
                             children: [
-                              const Expanded(child: Text('Daftar inspeksi', style: TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w700,
-                              ))),
+                              const Expanded(
+                                child: Text(
+                                  'Daftar inspeksi',
+                                  style: TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
                               if (!summaryLoading)
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 5,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFEEF4EF),
+                                    color: AppColors.primaryLight,
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  child: Text('${data.visibleRecords.length} hasil',
-                                    style: const TextStyle(fontSize: 11, color: AppColors.primary)),
+                                  child: Text(
+                                    '${data.visibleRecords.length} hasil',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
                                 ),
                               const SizedBox(width: 4),
                               IconButton(
-                                tooltip: _showSearch ? 'Tutup pencarian' : 'Cari laporan',
+                                tooltip: _showSearch
+                                    ? 'Tutup pencarian'
+                                    : 'Cari laporan',
                                 onPressed: _toggleSearch,
-                                icon: Icon(_showSearch ? LucideIcons.x : LucideIcons.search,
-                                  size: 20, color: AppColors.primary),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Wrap(
-                            spacing: 8, runSpacing: 4,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            children: [
-                              TextButton.icon(
-                                onPressed: _choosePeriod,
-                                icon: const Icon(LucideIcons.calendarDays, size: 16),
-                                label: Text(periodLabel,
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: AppColors.primary,
-                                  backgroundColor: const Color(0xFFEEF4EF),
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                icon: Icon(
+                                  _showSearch
+                                      ? LucideIcons.x
+                                      : LucideIcons.search,
+                                  size: 20,
+                                  color: AppColors.primary,
                                 ),
                               ),
-                              if (hasFilters)
-                                TextButton.icon(
-                                  onPressed: _clearFilters,
-                                  icon: const Icon(LucideIcons.rotateCcw, size: 14),
-                                  label: const Text('Reset filter', style: TextStyle(fontSize: 12)),
-                                  style: TextButton.styleFrom(foregroundColor: const Color(0xFF5C7064)),
-                                ),
                             ],
                           ),
                           if (_showSearch) ...[
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 8),
                             TextField(
                               controller: _searchController,
                               autofocus: true,
                               textInputAction: TextInputAction.search,
-                              onChanged: (value) => ref.read(reportSearchProvider.notifier).state = value,
-                              onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                              onChanged: (value) =>
+                                  ref
+                                          .read(reportSearchProvider.notifier)
+                                          .state =
+                                      value,
+                              onSubmitted: (_) =>
+                                  FocusScope.of(context).unfocus(),
                               decoration: InputDecoration(
                                 hintText: 'Cari jenis, kode, atau jalan...',
                                 hintStyle: const TextStyle(fontSize: 13),
-                                prefixIcon: const Icon(LucideIcons.search, size: 18),
-                                filled: true, fillColor: Colors.white,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(color: Color(0xFFDCE6DE))),
+                                prefixIcon: const Icon(
+                                  LucideIcons.search,
+                                  size: 18,
+                                ),
+                                filled: true,
+                                fillColor: Colors.white,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: const BorderSide(
+                                    color: Color(0xFFDCE6DE),
+                                  ),
+                                ),
                               ),
                             ),
                           ],
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
-                            child: Row(children: ReportFilter.values.map((value) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ChoiceChip(
-                                label: Text(value.label, style: TextStyle(
-                                  fontSize: 12, fontWeight: FontWeight.w600,
-                                  color: filter == value ? Colors.white : const Color(0xFF5C7064),
-                                )),
-                                selected: filter == value,
-                                showCheckmark: false,
-                                selectedColor: AppColors.primary,
-                                backgroundColor: Colors.white,
-                                side: BorderSide(color: filter == value
-                                    ? AppColors.primary : const Color(0xFFDCE6DE)),
-                                onSelected: (_) => ref.read(reportFilterProvider.notifier).state = value,
-                              ),
-                            )).toList()),
+                            child: Row(
+                              children: ReportFilter.values
+                                  .map(
+                                    (value) => Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: ChoiceChip(
+                                        label: Text(
+                                          value.label,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: filter == value
+                                                ? Colors.white
+                                                : const Color(0xFF5C7064),
+                                          ),
+                                        ),
+                                        selected: filter == value,
+                                        showCheckmark: false,
+                                        selectedColor: AppColors.primary,
+                                        backgroundColor: Colors.white,
+                                        side: BorderSide(
+                                          color: filter == value
+                                              ? AppColors.primary
+                                              : const Color(0xFFDCE6DE),
+                                        ),
+                                        onSelected: (_) =>
+                                            ref
+                                                    .read(
+                                                      reportFilterProvider
+                                                          .notifier,
+                                                    )
+                                                    .state =
+                                                value,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
                           ),
+                          if (hasFilters)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: _clearFilters,
+                                icon: const Icon(
+                                  LucideIcons.rotateCcw,
+                                  size: 14,
+                                ),
+                                label: const Text('Reset filter'),
+                              ),
+                            ),
                           const SizedBox(height: 16),
                           if (dataAsync.hasError)
                             _message(
-                              LucideIcons.cloudOff, 'Laporan belum dapat dimuat',
+                              LucideIcons.cloudOff,
+                              'Laporan belum dapat dimuat',
                               'Coba muat ulang data inspeksi yang tersimpan.',
-                              action: 'Coba lagi', onAction: () => unawaited(_refresh()),
+                              action: 'Coba lagi',
+                              onAction: () => unawaited(_refresh()),
                             )
-                          else if (data == null || (unresolvedCloud && feed.syncing))
+                          else if (data == null ||
+                              (unresolvedCloud && feed.syncing))
                             const Padding(
                               padding: EdgeInsets.all(32),
-                              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
                             )
                           else if (unresolvedCloud)
                             _message(
-                              LucideIcons.cloudOff, 'Data cloud belum dapat dimuat',
+                              LucideIcons.cloudOff,
+                              'Data cloud belum dapat dimuat',
                               'Belum ada salinan inspeksi di perangkat ini. Coba lagi saat terhubung.',
-                              action: 'Muat ulang', onAction: () => unawaited(_refresh()),
+                              action: 'Muat ulang',
+                              onAction: () => unawaited(_refresh()),
                             )
                           else if (data.visibleRecords.isEmpty)
                             _emptyMessage(data, period),
@@ -301,9 +397,14 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
                             padding: const EdgeInsets.only(bottom: 14),
                             child: ReportTreeCard(
                               record: record,
-                              onTap: () => Navigator.push(context, MaterialPageRoute(
-                                builder: (_) => SavedInspectionDetailScreen(record: record),
-                              )),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => SavedInspectionDetailScreen(
+                                    record: record,
+                                  ),
+                                ),
+                              ),
                             ),
                           );
                         },
@@ -318,6 +419,25 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
       ),
     );
   }
+
+  Widget _periodButton(String label) => TextButton(
+    onPressed: _choosePeriod,
+    style: TextButton.styleFrom(
+      backgroundColor: AppColors.primaryLight,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(LucideIcons.calendarDays, size: 16),
+        const SizedBox(width: 8),
+        Flexible(child: Text(label)),
+        const SizedBox(width: 6),
+        const Icon(LucideIcons.chevronDown, size: 14),
+      ],
+    ),
+  );
 
   Widget _syncStatus(InspectionFeed feed, bool guest) {
     final String text;
@@ -346,9 +466,16 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
           child: Icon(icon, size: 15, color: const Color(0xFF5C7064)),
         ),
         const SizedBox(width: 8),
-        Expanded(child: Text(text, style: const TextStyle(
-          fontSize: 11, color: Color(0xFF5C7064), height: 1.5,
-        ))),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFF5C7064),
+              height: 1.5,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -356,37 +483,50 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
   Widget _emptyMessage(ReportData data, ReportPeriod period) {
     if (data.totalStored == 0) {
       return _message(
-        LucideIcons.clipboardList, 'Belum ada laporan inspeksi',
+        LucideIcons.clipboardList,
+        'Belum ada laporan inspeksi',
         'Hasil inspeksi yang Anda simpan akan tampil di sini.',
-        action: 'Mulai inspeksi', onAction: _startScan,
+        action: 'Mulai inspeksi',
+        onAction: _startScan,
       );
     }
     if (data.inspectedCount == 0 && period == ReportPeriod.currentMonth) {
       return _message(
-        LucideIcons.calendarDays, 'Belum ada inspeksi bulan ini',
+        LucideIcons.calendarDays,
+        'Belum ada inspeksi bulan ini',
         'Anda masih bisa membuka laporan yang tersimpan pada bulan sebelumnya.',
         action: 'Lihat semua waktu',
-        onAction: () => ref.read(reportPeriodProvider.notifier).state = ReportPeriod.allTime,
+        onAction: () => ref.read(reportPeriodProvider.notifier).state =
+            ReportPeriod.allTime,
       );
     }
     if (data.inspectedCount == 0 && period != ReportPeriod.allTime) {
-      final label = reportPeriodLabel(period, ref.read(reportNowProvider),
-        ref.read(reportCustomDateProvider));
+      final label = reportPeriodLabel(
+        period,
+        ref.read(reportNowProvider),
+        ref.read(reportCustomDateProvider),
+      );
       return _message(
-        LucideIcons.calendarDays, 'Belum ada inspeksi pada periode ini',
+        LucideIcons.calendarDays,
+        'Belum ada inspeksi pada periode ini',
         'Tidak ada inspeksi tersimpan untuk $label.',
-        action: 'Ubah periode', onAction: _choosePeriod,
+        action: 'Ubah periode',
+        onAction: _choosePeriod,
       );
     }
     return _message(
-      LucideIcons.search, 'Tidak ada laporan yang cocok',
+      LucideIcons.search,
+      'Tidak ada laporan yang cocok',
       'Coba ubah tingkat risiko atau kata kunci pencarian.',
-      action: 'Hapus filter', onAction: _clearFilters,
+      action: 'Hapus filter',
+      onAction: _clearFilters,
     );
   }
 
   Widget _message(
-    IconData icon, String title, String description, {
+    IconData icon,
+    String title,
+    String description, {
     required String action,
     required VoidCallback onAction,
   }) => Container(
@@ -400,13 +540,21 @@ class _ReportScreenState extends ConsumerState<ReportScreen>
       children: [
         Icon(icon, size: 30, color: AppColors.primary),
         const SizedBox(height: 14),
-        Text(title, textAlign: TextAlign.center, style: const TextStyle(
-          fontSize: 15, fontWeight: FontWeight.w700,
-        )),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 8),
-        Text(description, textAlign: TextAlign.center, style: const TextStyle(
-          fontSize: 12, height: 1.6, color: Color(0xFF5C7064),
-        )),
+        Text(
+          description,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 12,
+            height: 1.6,
+            color: Color(0xFF5C7064),
+          ),
+        ),
         const SizedBox(height: 12),
         TextButton(onPressed: onAction, child: Text(action)),
       ],

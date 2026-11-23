@@ -60,8 +60,14 @@ Map<String, Object>? _analyzePhoto((String, Uint8List) input) {
   final service = OnnxService();
   try {
     service.initModelBytes(input.$2);
-    final result = service.runInference(img.bakeOrientation(decoded));
-    if (result == null || !result.isValidTree) return null;
+    var reason = BarkRejectionReason.invalidOutput;
+    String? diagnosticCode;
+    final result = service.runInference(img.bakeOrientation(decoded),
+      onRejected: (value) => reason = value,
+      onInvalidOutput: (code) => diagnosticCode = code);
+    if (result == null || !result.isValidTree) {
+      throw BarkAnalysisRejected(reason, diagnosticCode: diagnosticCode);
+    }
     return {
       'healthy': result.healthyPixels,
       'defect': result.defectPixels,

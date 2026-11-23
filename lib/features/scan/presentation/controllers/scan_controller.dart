@@ -7,7 +7,16 @@ import '../../domain/models/inspection_location.dart';
 import '../../domain/models/inspection_result_data.dart';
 import '../../../../core/services/onnx_service.dart';
 
-enum ScanStage { loading, ready, capturing, analyzing, locating, paused, error, completed }
+enum ScanStage {
+  loading,
+  ready,
+  capturing,
+  analyzing,
+  locating,
+  paused,
+  error,
+  completed,
+}
 
 /// Serializes native camera operations and rejects results from an old lifecycle.
 class ScanController extends ChangeNotifier {
@@ -18,7 +27,9 @@ class ScanController extends ChangeNotifier {
     InspectionLocation? selectedLocation,
     DateTime Function()? now,
     this.locationWaitTimeout = const Duration(seconds: 10),
+    this.locationMaxAge = const Duration(seconds: 30),
   }) : location = selectedLocation?.isValid == true ? selectedLocation : null,
+       _fixedLocation = selectedLocation?.isValid == true,
        _now = now ?? DateTime.now;
 
   final ScanCamera camera;
@@ -26,13 +37,15 @@ class ScanController extends ChangeNotifier {
   final Future<InspectionLocation?> Function() locationLoader;
   final DateTime Function() _now;
   final Duration locationWaitTimeout;
+  final Duration locationMaxAge;
+  final bool _fixedLocation;
+  DateTime? _locationResolvedAt;
   ScanStage stage = ScanStage.loading;
   InspectionLocation? location;
   String? notice;
   bool settingsRequired = false;
   bool cameraReady = false;
   bool locationPending = false;
-  bool _locationStarted = false;
   bool _active = true;
   bool _disposed = false;
   int _generation = 0;
@@ -41,13 +54,18 @@ class ScanController extends ChangeNotifier {
   Future<void>? _locationTask;
 
   bool get canCapture => stage == ScanStage.ready && _active && !_disposed;
-  bool get busy => stage == ScanStage.capturing || stage == ScanStage.analyzing ||
+  bool get busy =>
+      stage == ScanStage.capturing ||
+      stage == ScanStage.analyzing ||
       stage == ScanStage.locating;
   bool _current(int token) => !_disposed && _active && token == _generation;
 
   Future<T> _cameraOperation<T>(Future<T> Function() operation) {
     final next = _cameraTail.then((_) => operation());
-    _cameraTail = next.then<void>((_) {}, onError: (Object error, StackTrace stack) {});
+    _cameraTail = next.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stack) {},
+    );
     return next;
   }
 
@@ -69,7 +87,7 @@ class ScanController extends ChangeNotifier {
       cameraReady = true;
       _changed();
       // Camera permission is resolved before requesting location permission.
-      unawaited(_locationTask ??= _loadLocation());
+      unawaited(_ensureLocation(force: true));
       await analyzer.prepare();
       await _analysisDone;
       if (!_current(token)) return;
@@ -80,20 +98,46 @@ class ScanController extends ChangeNotifier {
       debugPrint('Scan initialization: $error\n$stack');
       stage = ScanStage.error;
       notice = error is ScanCameraFailure
-          ? error.message : 'Kamera atau pemrosesan foto belum siap. Coba lagi.';
+          ? error.message
+          : 'Kamera atau pemrosesan foto belum siap. Coba lagi.';
       settingsRequired = error is ScanCameraFailure && error.settingsRequired;
       _changed();
     }
   }
 
+  Future<void> _ensureLocation({bool force = false}) {
+    if (_fixedLocation || _disposed) return Future.value();
+    if (_locationTask != null) return _locationTask!;
+    final age = _locationResolvedAt == null
+        ? null
+        : _now().difference(_locationResolvedAt!);
+    if (!force &&
+        location != null &&
+        age != null &&
+        !age.isNegative &&
+        age < locationMaxAge) {
+      return Future.value();
+    }
+    // Never silently attach a known stale fix if the fresh request fails.
+    location = null;
+    _locationResolvedAt = null;
+    late final Future<void> task;
+    task = _loadLocation().whenComplete(() {
+      if (identical(_locationTask, task)) _locationTask = null;
+    });
+    _locationTask = task;
+    return task;
+  }
+
   Future<void> _loadLocation() async {
-    if (_locationStarted || location != null) return;
-    _locationStarted = true;
     locationPending = true;
     _changed();
     try {
       final resolved = await locationLoader();
-      if (!_disposed && resolved?.isValid == true) location = resolved;
+      if (!_disposed && resolved?.isValid == true) {
+        location = resolved;
+        _locationResolvedAt = _now();
+      }
     } catch (_) {
       // Missing location is explicit; it must not block taking a photo.
     } finally {
@@ -112,9 +156,11 @@ class ScanController extends ChangeNotifier {
       cameraReady = false;
       stage = ScanStage.paused;
       _changed();
-      unawaited(_cameraOperation(camera.close).catchError((Object error) {
-        debugPrint('Camera close: $error');
-      }));
+      unawaited(
+        _cameraOperation(camera.close).catchError((Object error) {
+          debugPrint('Camera close: $error');
+        }),
+      );
     }
   }
 
@@ -122,6 +168,7 @@ class ScanController extends ChangeNotifier {
     if (!canCapture) return null;
     final token = _generation;
     final capturedAt = _now();
+    unawaited(_ensureLocation());
     final capturedLocation = location;
     stage = ScanStage.capturing;
     notice = null;
@@ -136,16 +183,16 @@ class ScanController extends ChangeNotifier {
       YoloSegmentationResult? result;
       try {
         result = await analyzer.analyze(path);
+      } on BarkAnalysisRejected catch (error) {
+        // Object/confidence filtering must not block capturing an inspection.
+        // Malformed model data remains a technical failure, not an assessment.
+        if (error.reason == BarkRejectionReason.invalidOutput) rethrow;
+        result = null;
       } finally {
         completion.complete();
       }
       if (!_current(token)) return null;
-      if (result == null || !result.isValidTree) {
-        notice = 'Batang pohon belum dikenali dengan cukup jelas. Foto belum bisa dilaporkan. Arahkan kamera ke kulit batang pohon, lalu ambil ulang dengan cahaya cukup dan fokus.';
-        stage = ScanStage.ready;
-        _changed();
-        return null;
-      }
+      if (result?.isValidTree == false) result = null;
       // Give a GPS request started before the photo time to finish. Never wait
       // indefinitely, and never replace the location that was ready at capture.
       if (capturedLocation == null && locationPending) {
@@ -155,38 +202,55 @@ class ScanController extends ChangeNotifier {
         if (!_current(token)) return null;
       }
       final resultLocation = capturedLocation ?? location;
-      final data = InspectionResultData(
-        imagePath: path,
-        healthScore: (100 - result.persentaseLuka).round().clamp(10, 98),
-        riskStatus: result.riskDecision.riskStatus,
-        ronggaBatang: result.persentaseLuka,
-        // Existing estimates remain pending field calibration; see docs/scan-flow.md.
-        sudutKemiringan: double.parse(
-          (result.maxConfidenceRough * 18 + result.maxConfidenceCanker * 15 + 2)
-              .clamp(1.5, 38.0).toStringAsFixed(1)),
-        diameter: result.estimatedDbhCm,
-        isJamurPelapuk: result.isJamurPelapuk,
-        inspectionId: const Uuid().v4(),
-        treeSpecies: 'Belum ditentukan',
-        detectedCondition: result.detectedCondition,
-        locationAddress: resultLocation?.label ?? 'Lokasi belum tersedia',
-        scanTimestamp: capturedAt,
-        latitude: resultLocation?.latitude,
-        longitude: resultLocation?.longitude,
-        persentaseLuka: result.persentaseLuka,
-        failurePotential: result.failurePotential.label,
-        environmentalImpact: EnvironmentalImpact.medium.label,
-        riskAction: result.riskDecision.actionTitle,
-        healthyPixelCount: result.healthyPixels,
-        defectPixelCount: result.defectPixels,
-      );
+      final data = result == null
+          ? InspectionResultData.unassessed(
+              imagePath: path,
+              inspectionId: const Uuid().v4(),
+              locationAddress: resultLocation?.label ?? 'Lokasi belum tersedia',
+              scanTimestamp: capturedAt,
+              latitude: resultLocation?.latitude,
+              longitude: resultLocation?.longitude,
+            )
+          : InspectionResultData(
+              imagePath: path,
+              healthScore: (100 - result.persentaseLuka).round().clamp(0, 100),
+              riskStatus: result.riskDecision.riskStatus,
+              ronggaBatang: result.persentaseLuka,
+              // This model supplies no calibrated dimensions, inclination or fungus
+              // diagnosis. These placeholders are hidden by the measurement flags.
+              sudutKemiringan: 0,
+              diameter: 0,
+              isJamurPelapuk: false,
+              inspectionId: const Uuid().v4(),
+              treeSpecies: 'Belum ditentukan',
+              detectedCondition: result.detectedCondition,
+              locationAddress: resultLocation?.label ?? 'Lokasi belum tersedia',
+              scanTimestamp: capturedAt,
+              latitude: resultLocation?.latitude,
+              longitude: resultLocation?.longitude,
+              persentaseLuka: result.persentaseLuka,
+              failurePotential: result.failurePotential.label,
+              environmentalImpact: EnvironmentalImpact.medium.label,
+              riskAction: result.riskDecision.actionTitle,
+              healthyPixelCount: result.healthyPixels,
+              defectPixelCount: result.defectPixels,
+            );
       stage = ScanStage.completed;
       _changed();
       return data;
     } catch (error, stack) {
       if (!_current(token)) return null;
       debugPrint('Photo capture/analysis: $error\n$stack');
-      notice = stage == ScanStage.capturing
+      notice = error is BarkAnalysisRejected
+          ? switch (error.reason) {
+              BarkRejectionReason.lowConfidence =>
+                'Model belum cukup yakin mengenali kondisi kulit batang. Ini belum memastikan objek bukan pohon. Foto belum bisa dilaporkan. Foto batang asli dari dekat, termasuk bagian yang rusak.',
+              BarkRejectionReason.insufficientMask =>
+                'Area kulit batang belum terbaca cukup jelas. Foto belum bisa dilaporkan. Penuhi bingkai dengan batang dan bagian yang rusak, lalu ambil ulang dengan fokus.',
+              BarkRejectionReason.invalidOutput =>
+                'Hasil analisis belum dapat dibaca (kode ${error.diagnosticCode ?? "SCAN-00"}). Coba ulangi inspeksi. Jika tetap terjadi, laporkan kode ini.',
+            }
+          : stage == ScanStage.capturing
           ? 'Foto belum berhasil diambil. Coba tekan tombol foto lagi.'
           : 'Foto belum berhasil dianalisis. Coba ambil ulang dengan pencahayaan yang cukup.';
       stage = ScanStage.ready;
@@ -199,9 +263,11 @@ class ScanController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     ++_generation;
-    unawaited(_cameraOperation(camera.close).catchError((Object error) {
-      debugPrint('Camera disposal: $error');
-    }));
+    unawaited(
+      _cameraOperation(camera.close).catchError((Object error) {
+        debugPrint('Camera disposal: $error');
+      }),
+    );
     super.dispose();
   }
 }

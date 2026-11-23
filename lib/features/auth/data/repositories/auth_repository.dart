@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_profile.dart';
 
 class AuthRepository {
+  static const passwordRecoveryRedirect = 'kiwit://auth/recovery';
   final SupabaseClient _supabase;
 
   AuthRepository(this._supabase);
@@ -49,8 +50,8 @@ class AuthRepository {
           'rayon': rayon.trim(),
           'instansi': instansi.trim(),
           'job_title': jobTitle.trim(),
-          'inspected_trees_count': 348,
-          'reports_count': 18,
+          'inspected_trees_count': 0,
+          'reports_count': 0,
         },
       );
 
@@ -69,7 +70,9 @@ class AuthRepository {
           });
         } catch (dbError) {
           if (kDebugMode) {
-            debugPrint('[AuthRepository] Notice: profiles table sync skipped ($dbError). Data preserved in user_metadata.');
+            debugPrint(
+              '[AuthRepository] Notice: profiles table sync skipped ($dbError). Data preserved in user_metadata.',
+            );
           }
         }
       }
@@ -96,7 +99,10 @@ class AuthRepository {
   /// Send Password Reset Email
   Future<void> sendPasswordResetEmail(String email) async {
     try {
-      await _supabase.auth.resetPasswordForEmail(email.trim());
+      await _supabase.auth.resetPasswordForEmail(
+        email.trim(),
+        redirectTo: passwordRecoveryRedirect,
+      );
     } on AuthException {
       rethrow;
     } catch (e) {
@@ -109,6 +115,7 @@ class AuthRepository {
     final user = currentUser;
     if (user == null) return null;
 
+    Map<String, dynamic> stored = {};
     try {
       // 1. First try fetching from 'profiles' table
       final data = await _supabase
@@ -118,31 +125,35 @@ class AuthRepository {
           .maybeSingle();
 
       if (data != null) {
-        return UserProfile.fromJson(data);
+        stored = data;
       }
     } catch (e) {
       if (kDebugMode) {
-        debugPrint('[AuthRepository] Profiles table lookup failed, using metadata: $e');
+        debugPrint(
+          '[AuthRepository] Profiles table lookup failed, using metadata: $e',
+        );
       }
     }
 
-    // 2. Fallback to user metadata
+    // Auth metadata is the canonical source for editable fields. A failed
+    // optional profiles-table mirror must not bring back older field values.
     final metadata = user.userMetadata ?? {};
-    return UserProfile(
-      id: user.id,
-      email: user.email ?? '',
-      fullName: (metadata['full_name'] as String?)?.isNotEmpty == true
-          ? metadata['full_name'] as String
-          : (user.email?.split('@').first ?? 'Petugas DLH'),
-      jobTitle: (metadata['job_title'] as String?) ?? 'Petugas Lapangan DLH Surabaya',
-      nip: (metadata['nip'] as String?) ?? '19850312 201001 1 004',
-      rayon: (metadata['rayon'] as String?) ?? 'Rayon 3 — Sukolilo',
-      instansi: (metadata['instansi'] as String?) ?? 'DLH Kota Surabaya',
-      inspectedTreesCount: (metadata['inspected_trees_count'] as int?) ?? 348,
-      reportsCount: (metadata['reports_count'] as int?) ?? 18,
-      isSync: true,
-      avatarUrl: metadata['avatar_url'] as String?,
-    );
+    return UserProfile.fromJson({
+      'full_name': user.email?.split('@').first ?? 'Petugas DLH',
+      ...stored,
+      ...metadata,
+      'id': user.id,
+      'email': user.email ?? '',
+    });
+  }
+
+  Future<void> updatePassword(String password) async {
+    if (currentSession == null) {
+      throw const AuthException(
+        'Tautan pemulihan tidak berlaku. Minta tautan baru.',
+      );
+    }
+    await _supabase.auth.updateUser(UserAttributes(password: password));
   }
 
   /// Update User Profile

@@ -77,7 +77,7 @@ class _ReportAnalyticsChartState extends State<ReportAnalyticsChart> {
                         ),
                       ),
                       Text(
-                        'Matriks Evaluasi ISA-TRAQ',
+                        'Ringkasan prioritas pemeriksaan',
                         style: TextStyle(
                           fontSize: 11,
                           color: AppColors.textMuted,
@@ -164,7 +164,7 @@ class _ReportAnalyticsChartState extends State<ReportAnalyticsChart> {
                     color: AppColors.primary.withValues(alpha: 0.3),
                     blurRadius: 6,
                     offset: const Offset(0, 2),
-                  )
+                  ),
                 ]
               : null,
         ),
@@ -257,9 +257,15 @@ class _ReportAnalyticsChartState extends State<ReportAnalyticsChart> {
               },
             ),
           ),
-          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
         ),
         gridData: FlGridData(
           show: true,
@@ -285,7 +291,9 @@ class _ReportAnalyticsChartState extends State<ReportAnalyticsChart> {
                   colors: colors[index],
                 ),
                 width: isTouched ? 28 : 22,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(8),
+                ),
                 backDrawRodData: BackgroundBarChartRodData(
                   show: true,
                   toY: topLimit,
@@ -335,9 +343,15 @@ class _ReportAnalyticsChartState extends State<ReportAnalyticsChart> {
               },
             ),
           ),
-          leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
         ),
         borderData: FlBorderData(show: false),
         minX: 0,
@@ -360,11 +374,11 @@ class _ReportAnalyticsChartState extends State<ReportAnalyticsChart> {
               show: true,
               getDotPainter: (spot, percent, barData, index) =>
                   FlDotCirclePainter(
-                radius: 4,
-                color: Colors.white,
-                strokeWidth: 3,
-                strokeColor: AppColors.primary,
-              ),
+                    radius: 4,
+                    color: Colors.white,
+                    strokeWidth: 3,
+                    strokeColor: AppColors.primary,
+                  ),
             ),
             belowBarData: BarAreaData(
               show: true,

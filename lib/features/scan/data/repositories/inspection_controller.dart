@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -26,11 +27,16 @@ class InspectionFeed {
     required List<SavedInspection> records,
     this.syncing = false,
     this.syncIssue,
-  }) : records = List.unmodifiable(records);
+    Map<String, String> recordSyncIssues = const {},
+    this.recoveryIssue,
+  }) : records = List.unmodifiable(records),
+       recordSyncIssues = Map.unmodifiable(recordSyncIssues);
 
   final List<SavedInspection> records;
   final bool syncing;
   final String? syncIssue;
+  final Map<String, String> recordSyncIssues;
+  final String? recoveryIssue;
 
   int get pendingCount => records.where((record) => !record.isSynced).length;
 }
@@ -44,7 +50,17 @@ class InspectionController extends StateNotifier<AsyncValue<InspectionFeed>> {
     this.remote,
   }) : super(const AsyncValue.loading()) {
     _initialization = _enqueue(() async {
-      final records = await local.load();
+      List<SavedInspection> records;
+      try {
+        records = await local.load();
+      } catch (_) {
+        final storage = local;
+        if (storage is! RecoverableInspectionStorage) rethrow;
+        records = await (storage as RecoverableInspectionStorage).recover();
+      }
+      if (local case final RecoverableInspectionStorage storage) {
+        _recoveryIssue = storage.recoveryIssue;
+      }
       _requireOwner(records);
       _records = _sort(records);
       _emit();
@@ -66,6 +82,8 @@ class InspectionController extends StateNotifier<AsyncValue<InspectionFeed>> {
   bool _syncing = false;
   bool _refreshAgain = false;
   String? _syncIssue;
+  final Map<String, String> _recordSyncIssues = {};
+  String? _recoveryIssue;
 
   Future<T> _enqueue<T>(Future<T> Function() action) {
     final result = _queue.then((_) => action());
@@ -113,11 +131,15 @@ class InspectionController extends StateNotifier<AsyncValue<InspectionFeed>> {
 
   void _emit() {
     if (_disposed) return;
-    state = AsyncValue.data(InspectionFeed(
-      records: _records,
-      syncing: _syncing,
-      syncIssue: _syncIssue,
-    ));
+    state = AsyncValue.data(
+      InspectionFeed(
+        records: _records,
+        syncing: _syncing,
+        syncIssue: _syncIssue,
+        recordSyncIssues: _recordSyncIssues,
+        recoveryIssue: _recoveryIssue,
+      ),
+    );
   }
 
   Future<SavedInspection> save({
@@ -185,18 +207,37 @@ class InspectionController extends StateNotifier<AsyncValue<InspectionFeed>> {
     _syncing = true;
     _emit();
     try {
-      for (final pending in _records.where((record) => !record.isSynced).toList()) {
+      for (final pending
+          in _records.where((record) => !record.isSynced).toList()) {
         if (_disposed) return;
-        final synced = await cloud.push(pending);
-        await _enqueue(() async {
-          if (_disposed) return;
-          _requireOwner([synced]);
-          final next = _records.map((record) => record.id == synced.id ? synced : record).toList();
-          await local.write(next);
-          _records = next;
-          _emit();
-        });
+        try {
+          final synced = await cloud.push(pending);
+          await _enqueue(() async {
+            if (_disposed) return;
+            _requireOwner([synced]);
+            if (synced.id != pending.id) {
+              throw const InspectionSyncException(
+                'Identitas hasil sinkronisasi tidak sesuai.',
+              );
+            }
+            final next = _records
+                .map((record) => record.id == synced.id ? synced : record)
+                .toList();
+            await local.write(next);
+            _records = next;
+            _recordSyncIssues.remove(pending.id);
+            _emit();
+          });
+        } catch (error) {
+          _recordSyncIssues[pending.id] = error is FileSystemException
+              ? 'Foto lokal tidak dapat dibaca. Periksa foto atau ambil inspeksi ulang.'
+              : error is InspectionSyncException
+              ? error.message
+              : 'Inspeksi ini belum terkirim. Coba sinkronkan lagi saat terhubung.';
+          // A failed record must not starve later uploads or cloud downloads.
+        }
       }
+      if (_disposed || !cloud.canSync) return;
       final remoteRecords = await cloud.fetchAll();
       _requireOwner(remoteRecords);
       await _enqueue(() async {
@@ -220,7 +261,14 @@ class InspectionController extends StateNotifier<AsyncValue<InspectionFeed>> {
         await local.write(next);
         _records = next;
       });
-      _syncIssue = null;
+      final pendingIds = _records
+          .where((r) => !r.isSynced)
+          .map((r) => r.id)
+          .toSet();
+      _recordSyncIssues.removeWhere((id, _) => !pendingIds.contains(id));
+      _syncIssue = _recordSyncIssues.isEmpty
+          ? null
+          : '${_recordSyncIssues.length} inspeksi belum berhasil disinkronkan. Lihat daftar sinkronisasi.';
     } catch (error) {
       _syncIssue = error is InspectionSyncException
           ? error.message

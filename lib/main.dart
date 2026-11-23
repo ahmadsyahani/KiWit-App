@@ -5,6 +5,9 @@ import 'core/config/env_config.dart';
 import 'core/services/supabase_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/screens/auth_gate.dart';
+import 'features/auth/presentation/screens/reset_password_screen.dart';
+
+final _appNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,7 +19,7 @@ void main() async {
 
   PlatformDispatcher.instance.onError = (error, stack) {
     debugPrint('[PlatformDispatcher Error] $error');
-    return true; 
+    return true;
   };
 
   try {
@@ -41,6 +44,7 @@ class KiWitApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'KiWit',
+      navigatorKey: _appNavigatorKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       home: const AuthGate(),
@@ -55,11 +59,18 @@ class KiWitApp extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, color: Colors.orange, size: 48),
+                    const Icon(
+                      Icons.error_outline,
+                      color: Colors.orange,
+                      size: 48,
+                    ),
                     const SizedBox(height: 16),
                     const Text(
                       'Terjadi Kendala Tampilan',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
@@ -73,7 +84,10 @@ class KiWitApp extends StatelessWidget {
             ),
           );
         };
-        return child ?? const SizedBox.shrink();
+        return AuthRecoveryGuard(
+          appNavigatorKey: _appNavigatorKey,
+          child: child ?? const SizedBox.shrink(),
+        );
       },
     );
   }

@@ -79,6 +79,12 @@ flutter:
     - assets/models/best.onnx
     - assets/models/kiwit_bark_model.onnx
     - assets/branding/kiwit-launcher-preview.png
+    - assets/fonts/GoogleSansFlex-OFL.txt
+
+  fonts:
+    - family: Google Sans Flex
+      fonts:
+        - asset: assets/fonts/GoogleSansFlex.ttf
 
 
   # An image asset can refer to one or more resolution-specific "variants", see

@@ -19,10 +19,12 @@ class InspectionResultScreen extends ConsumerStatefulWidget {
   const InspectionResultScreen({super.key, required this.data});
 
   @override
-  ConsumerState<InspectionResultScreen> createState() => _InspectionResultScreenState();
+  ConsumerState<InspectionResultScreen> createState() =>
+      _InspectionResultScreenState();
 }
 
-class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen> {
+class _InspectionResultScreenState
+    extends ConsumerState<InspectionResultScreen> {
   late InspectionResultData _data;
   final TextEditingController _notesController = TextEditingController();
   bool _isSaving = false;
@@ -71,20 +73,27 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
   void _navigateToRetake(BuildContext context) {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => ScanScreen(
-        selectedLocation: validInspectionCoordinates(_data.latitude, _data.longitude)
-            ? InspectionLocation(latitude: _data.latitude!, longitude: _data.longitude!,
-                address: _data.locationAddress)
-            : null,
-      )),
+      MaterialPageRoute(
+        builder: (_) => ScanScreen(
+          selectedLocation:
+              validInspectionCoordinates(_data.latitude, _data.longitude)
+              ? InspectionLocation(
+                  latitude: _data.latitude!,
+                  longitude: _data.longitude!,
+                  address: _data.locationAddress,
+                )
+              : null,
+        ),
+      ),
     );
   }
 
-  /// Rekalkulasi Matriks ISA TRAQ secara dinamis saat DBH atau Dampak Lingkungan diubah
+  /// Update the preliminary photo priority. Optional measured DBH is recorded
+  /// separately and never changes the photo-area screening category.
   void _recalculateIsaTraq({double? newDbh, EnvironmentalImpact? newImpact}) {
     final dbh = newDbh ?? _data.diameter;
-    final currentImpact = newImpact ??
-        EnvironmentalImpact.fromString(_data.environmentalImpact);
+    final currentImpact =
+        newImpact ?? EnvironmentalImpact.fromString(_data.environmentalImpact);
 
     final failure = IsaTraqEvaluator.evaluateFailurePotential(
       _data.persentaseLuka,
@@ -98,17 +107,24 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
     setState(() {
       _data = _data.copyWith(
         diameter: dbh,
+        hasMeasuredDiameter: newDbh != null || _data.hasMeasuredDiameter,
         failurePotential: failure.label,
         environmentalImpact: currentImpact.label,
-        riskStatus: decision.riskStatus,
-        riskAction: decision.actionTitle,
+        riskStatus: _data.isOfficerAssessed
+            ? _data.riskStatus
+            : decision.riskStatus,
+        riskAction: _data.isOfficerAssessed
+            ? _data.riskAction
+            : decision.actionTitle,
+        modelRiskStatus: decision.riskStatus,
       );
     });
   }
 
   Future<void> _showEditDbhDialog() async {
-    final dbhController =
-        TextEditingController(text: _data.diameter.toStringAsFixed(1));
+    final dbhController = TextEditingController(
+      text: _data.hasMeasuredDiameter ? _data.diameter.toStringAsFixed(1) : '',
+    );
     await showDialog(
       context: context,
       builder: (ctx) {
@@ -125,14 +141,15 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Diameter at Breast Height (cm) menentukan Variabel A Potensi Kegagalan pohon pada Matriks ISA TRAQ.',
+                'Opsional: masukkan diameter hasil pengukuran langsung. Foto tanpa skala tidak dapat menentukan diameter dalam cm.',
                 style: TextStyle(fontSize: 12, color: AppColors.textMuted),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: dbhController,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 decoration: InputDecoration(
                   suffixText: 'cm',
                   filled: true,
@@ -152,21 +169,22 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
             ElevatedButton(
               onPressed: () {
                 final val = double.tryParse(dbhController.text.trim());
-                if (val != null && val > 0) {
+                if (val != null && val.isFinite && val > 0) {
                   _recalculateIsaTraq(newDbh: val);
+                  Navigator.pop(ctx);
                 }
-                Navigator.pop(ctx);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Simpan & Evaluasi'),
+              child: const Text('Simpan pengukuran'),
             ),
           ],
         );
       },
     );
+    dbhController.dispose();
   }
 
   Future<void> _showEditSpeciesSheet() async {
@@ -239,8 +257,9 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                       title: Text(
                         sp,
                         style: TextStyle(
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                           color: isSelected
                               ? AppColors.primary
                               : AppColors.textPrimary,
@@ -311,20 +330,31 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
 
   Future<void> _showEditLocationSheet() async {
     final edit = await showModalBottomSheet<InspectionLocationEdit>(
-      context: context, isScrollControlled: true, useSafeArea: true,
-      showDragHandle: true, backgroundColor: AppColors.surface,
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: AppColors.surface,
       builder: (_) => InspectionLocationEditor(
         initialAddress: _data.locationAddress,
-        initialLocation: validInspectionCoordinates(_data.latitude, _data.longitude)
-          ? InspectionLocation(latitude: _data.latitude!, longitude: _data.longitude!,
-              address: _data.locationAddress) : null,
+        initialLocation:
+            validInspectionCoordinates(_data.latitude, _data.longitude)
+            ? InspectionLocation(
+                latitude: _data.latitude!,
+                longitude: _data.longitude!,
+                address: _data.locationAddress,
+              )
+            : null,
       ),
     );
     if (!mounted || edit == null) return;
-    setState(() => _data = _data.copyWith(
-      locationAddress: edit.address,
-      latitude: edit.point?.latitude, longitude: edit.point?.longitude,
-    ));
+    setState(
+      () => _data = _data.copyWith(
+        locationAddress: edit.address,
+        latitude: edit.point?.latitude,
+        longitude: edit.point?.longitude,
+      ),
+    );
   }
 
   Future<void> _showEditIdDialog() async {
@@ -382,50 +412,99 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
     final risks = ['Rendah', 'Sedang', 'Tinggi', 'Kritis'];
     await showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Status & Risiko Pohon',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Sesuaikan tingkat resiko pohon berdasarkan observasi visual petugas:',
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-              ),
-              const SizedBox(height: 16),
-              ...risks.map((r) {
-                final isSelected =
-                    r.toLowerCase() == _data.riskStatus.toLowerCase();
-                return ListTile(
-                  title: Text(
-                    r,
-                    style: TextStyle(
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
+        return SafeArea(
+          top: false,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Status & Risiko Pohon',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Sesuaikan tingkat resiko pohon berdasarkan observasi visual petugas:',
+                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                ),
+                const SizedBox(height: 16),
+                ...risks.map((r) {
+                  final isSelected =
+                      r.toLowerCase() == _data.riskStatus.toLowerCase();
+                  return ListTile(
+                    title: Text(
+                      r,
+                      style: TextStyle(
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
                     ),
+                    trailing: isSelected
+                        ? const Icon(
+                            LucideIcons.check,
+                            color: AppColors.primary,
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        final model = IsaTraqEvaluator.evaluateMatrix(
+                          failurePotential: FailurePotential.fromString(
+                            _data.failurePotential,
+                          ),
+                          environmentalImpact: EnvironmentalImpact.fromString(
+                            _data.environmentalImpact,
+                          ),
+                        );
+                        final officer = IsaTraqEvaluator.decisionForOfficerRisk(
+                          r,
+                        );
+                        _data = _data.copyWith(
+                          riskStatus: officer.riskStatus,
+                          riskAction: officer.actionTitle,
+                          isOfficerAssessed: true,
+                          modelRiskStatus: model.riskStatus,
+                        );
+                      });
+                      Navigator.pop(ctx);
+                    },
+                  );
+                }),
+                if (_data.isOfficerAssessed)
+                  TextButton(
+                    onPressed: () {
+                      final model = IsaTraqEvaluator.evaluateMatrix(
+                        failurePotential: FailurePotential.fromString(
+                          _data.failurePotential,
+                        ),
+                        environmentalImpact: EnvironmentalImpact.fromString(
+                          _data.environmentalImpact,
+                        ),
+                      );
+                      setState(
+                        () => _data = _data.copyWith(
+                          riskStatus: model.riskStatus,
+                          riskAction: model.actionTitle,
+                          modelRiskStatus: model.riskStatus,
+                          isOfficerAssessed: false,
+                        ),
+                      );
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('Gunakan hasil model'),
                   ),
-                  trailing: isSelected
-                      ? const Icon(LucideIcons.check, color: AppColors.primary)
-                      : null,
-                  onTap: () {
-                    setState(() {
-                      _data = _data.copyWith(riskStatus: r);
-                    });
-                    Navigator.pop(ctx);
-                  },
-                );
-              }),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -438,16 +517,18 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
     try {
       final profile = ref.read(userProfileProvider).valueOrNull;
       final user = ref.read(currentUserProvider);
-      await ref.read(inspectionControllerProvider.notifier).save(
-        data: _data,
-        notes: _notesController.text.trim(),
-        inspectorName: profile?.fullName
-            ?? user?.userMetadata?['full_name'] as String?
-            ?? '',
-        rayon: profile?.rayon
-            ?? user?.userMetadata?['rayon'] as String?
-            ?? '',
-      );
+      await ref
+          .read(inspectionControllerProvider.notifier)
+          .save(
+            data: _data,
+            notes: _notesController.text.trim(),
+            inspectorName:
+                profile?.fullName ??
+                user?.userMetadata?['full_name'] as String? ??
+                '',
+            rayon:
+                profile?.rayon ?? user?.userMetadata?['rayon'] as String? ?? '',
+          );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -474,14 +555,119 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
     }
   }
 
+  Widget _buildUnassessedResult(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.background,
+    appBar: AppBar(title: const Text('Hasil Inspeksi')),
+    body: SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Image.file(
+              File(_data.imagePath),
+              height: 240,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (_, error, stack) => const SizedBox(
+                height: 160,
+                child: Icon(Icons.image_not_supported_outlined, size: 40),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: RiskBadge(level: RiskLevel.belumDinilai),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'Kondisi belum dapat dinilai',
+            style: TextStyle(
+              fontSize: 23,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Foto berhasil diambil. Model belum menghasilkan penilaian kondisi yang cukup. Simpan foto sebagai catatan inspeksi dan periksa pohon secara manual.',
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.6,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 24),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(
+              Icons.location_on_outlined,
+              color: AppColors.primary,
+            ),
+            title: const Text('Lokasi inspeksi'),
+            subtitle: Text(_data.locationAddress),
+            trailing: TextButton(
+              onPressed: _isSaving ? null : _showEditLocationSheet,
+              child: const Text('Ubah'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _notesController,
+            enabled: !_isSaving,
+            minLines: 2,
+            maxLines: 5,
+            decoration: const InputDecoration(
+              labelText: 'Catatan lapangan',
+              hintText: 'Tuliskan kondisi yang terlihat (opsional)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            onPressed: _isSaving ? null : _saveInspectionResult,
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(54),
+            ),
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: Text(_isSaving ? 'Menyimpan...' : 'Simpan inspeksi'),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _isSaving ? null : () => _navigateToRetake(context),
+            icon: const Icon(Icons.camera_alt_outlined),
+            label: const Text('Foto ulang'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(50),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
+    if (!_data.hasAssessment) return _buildUnassessedResult(context);
     final impact = EnvironmentalImpact.fromString(_data.environmentalImpact);
     final failure = FailurePotential.fromString(_data.failurePotential);
-    final decision = IsaTraqEvaluator.evaluateMatrix(
+    final modelDecision = IsaTraqEvaluator.evaluateMatrix(
       failurePotential: failure,
       environmentalImpact: impact,
     );
+    final decision = _data.isOfficerAssessed
+        ? IsaTraqEvaluator.decisionForOfficerRisk(_data.riskStatus)
+        : modelDecision;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -523,8 +709,11 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                           File(_data.imagePath),
                           fit: BoxFit.cover,
                           errorBuilder: (_, error, stack) => const Center(
-                            child: Icon(Icons.image_not_supported_outlined,
-                                color: Colors.white70, size: 40),
+                            child: Icon(
+                              Icons.image_not_supported_outlined,
+                              color: Colors.white70,
+                              size: 40,
+                            ),
                           ),
                         ),
                       ),
@@ -548,7 +737,9 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             // Badges (ID & Risk)
-                            Row(
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
                               children: [
                                 InkWell(
                                   onTap: _showEditIdDialog,
@@ -559,7 +750,9 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                                       vertical: 4,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.25),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.25,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Row(
@@ -583,7 +776,6 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
                                 InkWell(
                                   onTap: _showRiskConditionPicker,
                                   borderRadius: BorderRadius.circular(12),
@@ -616,7 +808,9 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                                   Container(
                                     padding: const EdgeInsets.all(4),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: 0.2),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.2,
+                                      ),
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(
@@ -675,30 +869,62 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.surface, borderRadius: BorderRadius.circular(16),
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: AppColors.border),
                 ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    const Icon(Icons.location_on_outlined, size: 20, color: AppColors.primary),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(
-                      validInspectionCoordinates(_data.latitude, _data.longitude)
-                        ? 'Lokasi inspeksi' : 'Lokasi belum tersedia',
-                      style: const TextStyle(fontWeight: FontWeight.w600))),
-                  ]),
-                  const SizedBox(height: 8),
-                  Text(validInspectionCoordinates(_data.latitude, _data.longitude)
-                    ? _data.locationAddress
-                    : 'Foto sudah dianalisis. Lengkapi lokasi agar inspeksi muncul di peta.',
-                    style: const TextStyle(fontSize: 13, height: 1.5, color: AppColors.textSecondary)),
-                  const SizedBox(height: 6),
-                  TextButton(
-                    onPressed: _showEditLocationSheet,
-                    child: Text(validInspectionCoordinates(_data.latitude, _data.longitude)
-                      ? 'Ubah lokasi' : 'Lengkapi lokasi'),
-                  ),
-                ]),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on_outlined,
+                          size: 20,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            validInspectionCoordinates(
+                                  _data.latitude,
+                                  _data.longitude,
+                                )
+                                ? 'Lokasi inspeksi'
+                                : 'Lokasi belum tersedia',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      validInspectionCoordinates(
+                            _data.latitude,
+                            _data.longitude,
+                          )
+                          ? _data.locationAddress
+                          : 'Foto sudah dianalisis. Lengkapi lokasi agar inspeksi muncul di peta.',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        height: 1.5,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextButton(
+                      onPressed: _showEditLocationSheet,
+                      child: Text(
+                        validInspectionCoordinates(
+                              _data.latitude,
+                              _data.longitude,
+                            )
+                            ? 'Ubah lokasi'
+                            : 'Lengkapi lokasi',
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -792,21 +1018,25 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                           ),
                         ),
                         const SizedBox(width: 10),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Matriks Risiko ISA TRAQ',
-                                style: TextStyle(
+                                _data.isOfficerAssessed
+                                    ? 'Penilaian petugas'
+                                    : 'Prioritas pemeriksaan awal',
+                                style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   color: AppColors.textPrimary,
                                 ),
                               ),
                               Text(
-                                'Standar Penilaian Bahaya Pohon DLH',
-                                style: TextStyle(
+                                _data.isOfficerAssessed
+                                    ? 'Skrining foto: ${modelDecision.riskStatus}. Risiko akhir ditetapkan petugas.'
+                                    : 'Skrining foto, bukan penilaian keselamatan pohon',
+                                style: const TextStyle(
                                   fontSize: 11,
                                   color: AppColors.textMuted,
                                 ),
@@ -838,10 +1068,10 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                             decision.riskLevel == RiskLevel.kritis
                                 ? LucideIcons.alertOctagon
                                 : decision.riskLevel == RiskLevel.tinggi
-                                    ? LucideIcons.alertTriangle
-                                    : decision.riskLevel == RiskLevel.sedang
-                                        ? LucideIcons.alertCircle
-                                        : LucideIcons.checkCircle2,
+                                ? LucideIcons.alertTriangle
+                                : decision.riskLevel == RiskLevel.sedang
+                                ? LucideIcons.alertCircle
+                                : LucideIcons.checkCircle2,
                             color: decision.statusColor,
                             size: 26,
                           ),
@@ -851,7 +1081,7 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'Vonis Laporan Akhir:',
+                                  'Saran tindak lanjut:',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,
@@ -888,14 +1118,16 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                         children: [
                           Row(
                             children: [
-                              const Expanded(child: Text(
-                                'Variabel A: Potensi Kegagalan',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
+                              const Expanded(
+                                child: Text(
+                                  'Pola kerusakan pada foto',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
-                              )),
+                              ),
                               const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -903,11 +1135,13 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                                   vertical: 3,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: decision.statusColor.withValues(alpha: 0.15),
+                                  color: decision.statusColor.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
-                                  failure.label,
+                                  '${_data.persentaseLuka.toStringAsFixed(1)}%',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
@@ -919,7 +1153,7 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${failure.description} (Luka: ${_data.persentaseLuka.toStringAsFixed(1)}%, DBH: ${_data.diameter.toStringAsFixed(1)} cm)',
+                            '${failure.description}. Persentase dihitung dari area kulit yang dikenali, bukan kedalaman rongga atau kekuatan batang.',
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.textMuted,
@@ -991,8 +1225,8 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                                     imp == EnvironmentalImpact.low
                                         ? 'Lahan kosong'
                                         : imp == EnvironmentalImpact.medium
-                                            ? 'Taman / Sepi'
-                                            : 'Jalan raya',
+                                        ? 'Taman / Sepi'
+                                        : 'Jalan raya',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: 10,
@@ -1028,15 +1262,17 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Skor Kesehatan Batang',
+                      'Indeks tampilan kulit pada foto',
                       style: TextStyle(
                         color: AppColors.primary,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.end,
                       children: [
                         Text(
                           '${_data.healthScore}',
@@ -1057,22 +1293,21 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(child: Padding(
+                        Padding(
                           padding: const EdgeInsets.only(bottom: 6.0),
                           child: Text(
                             _data.healthScore > 75
-                                ? 'Kondisi Baik'
+                                ? 'Pola kerusakan sedikit'
                                 : _data.healthScore > 50
-                                    ? 'Kondisi Sedang'
-                                    : 'Kondisi Buruk',
+                                ? 'Pola kerusakan sedang'
+                                : 'Pola kerusakan dominan',
                             textAlign: TextAlign.end,
                             style: const TextStyle(
                               color: AppColors.primary,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                        )),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -1111,8 +1346,10 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                   Expanded(
                     child: _buildMetricCard(
                       'Sudut Kemiringan',
-                      '${_data.sudutKemiringan.toStringAsFixed(1)}°',
-                      subtitle: 'Estimasi belum dikalibrasi',
+                      _data.hasMeasuredInclination
+                          ? '${_data.sudutKemiringan.toStringAsFixed(1)}°'
+                          : 'Belum diukur',
+                      subtitle: 'Tidak ditentukan dari foto',
                     ),
                   ),
                 ],
@@ -1128,9 +1365,11 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                       onTap: _showEditDbhDialog,
                       child: _buildMetricCard(
                         'Diameter Batang (DBH)',
-                        '${_data.diameter.toStringAsFixed(1)} cm',
+                        _data.hasMeasuredDiameter
+                            ? '${_data.diameter.toStringAsFixed(1)} cm'
+                            : 'Belum diukur',
                         isEditable: true,
-                        subtitle: 'Estimasi; ubah sesuai pengukuran',
+                        subtitle: 'Pengukuran langsung (opsional)',
                       ),
                     ),
                   ),
@@ -1138,10 +1377,13 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
                   Expanded(
                     child: _buildMetricCard(
                       'Jamur Pelapuk',
-                      _data.isJamurPelapuk ? 'Positif' : 'Negatif',
-                      valueColor: _data.isJamurPelapuk
-                          ? Colors.red
-                          : Colors.green,
+                      _data.hasPathologyAssessment
+                          ? (_data.isJamurPelapuk
+                                ? 'Tercatat positif'
+                                : 'Tercatat negatif')
+                          : 'Tidak dinilai',
+                      subtitle: 'Model mengenali pola kulit',
+                      valueColor: AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -1296,10 +1538,7 @@ class _InspectionResultScreenState extends ConsumerState<InspectionResultScreen>
             const SizedBox(height: 4),
             Text(
               subtitle,
-              style: const TextStyle(
-                fontSize: 10,
-                color: AppColors.textMuted,
-              ),
+              style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
             ),
           ],
         ],

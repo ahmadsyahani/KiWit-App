@@ -37,13 +37,23 @@ class ProfileSectionTitle extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(title, style: const TextStyle(
-        color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700,
-      )),
+      Text(
+        title,
+        style: const TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
       const SizedBox(height: 4),
-      Text(subtitle, style: const TextStyle(
-        color: profileSecondary, fontSize: 13, height: 1.5,
-      )),
+      Text(
+        subtitle,
+        style: const TextStyle(
+          color: profileSecondary,
+          fontSize: 13,
+          height: 1.5,
+        ),
+      ),
     ],
   );
 }
@@ -77,15 +87,18 @@ class ProfileDetail extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(
-                color: profileSecondary, fontSize: 12,
-              )),
+              Text(
+                label,
+                style: const TextStyle(color: profileSecondary, fontSize: 12),
+              ),
               const SizedBox(height: 5),
               Text(
                 value.trim().isEmpty || value == '-' ? 'Belum diisi' : value,
                 style: const TextStyle(
-                  color: AppColors.textPrimary, fontSize: 14,
-                  fontWeight: FontWeight.w600, height: 1.5,
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  height: 1.5,
                 ),
               ),
             ],
@@ -101,30 +114,48 @@ class ProfileAvatar extends StatelessWidget {
     required this.name,
     this.avatarUrl,
     this.dark = false,
+    this.circular = false,
+    this.filled = false,
     super.key,
   });
 
   final String name;
   final String? avatarUrl;
   final bool dark;
+  final bool circular;
+  final bool filled;
 
   @override
   Widget build(BuildContext context) {
-    final words = name.trim().split(RegExp(r'\s+'))
-        .where((word) => word.isNotEmpty).toList();
-    final initials = words.take(2).map((word) =>
-        word.characters.first).join().toUpperCase();
-    final background = dark ? Colors.white.withValues(alpha: 0.14)
+    final words = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .toList();
+    final initials = words
+        .take(2)
+        .map((word) => word.characters.first)
+        .join()
+        .toUpperCase();
+    final background = filled
+        ? AppColors.primary
+        : dark
+        ? Colors.white.withValues(alpha: 0.14)
         : AppColors.primaryLight;
-    final foreground = dark ? Colors.white : AppColors.primary;
+    final foreground = dark || filled ? Colors.white : AppColors.primary;
     final fallback = Center(
       child: initials.isEmpty
           ? Icon(LucideIcons.user, color: foreground, size: 28)
           : FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(initials, style: TextStyle(
-                color: foreground, fontSize: 24, fontWeight: FontWeight.w700,
-              )),
+              child: Text(
+                initials,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
     );
     return ExcludeSemantics(
@@ -134,16 +165,21 @@ class ProfileAvatar extends StatelessWidget {
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
           color: background,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: dark
-              ? Colors.white.withValues(alpha: 0.25)
-              : const Color(0xFFDCE6DE)),
+          borderRadius: BorderRadius.circular(circular ? 36 : 22),
+          border: Border.all(
+            color: dark
+                ? Colors.white.withValues(alpha: 0.25)
+                : const Color(0xFFDCE6DE),
+          ),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(circular ? 33 : 18),
           child: avatarUrl != null && avatarUrl!.trim().isNotEmpty
-              ? Image.network(avatarUrl!, fit: BoxFit.cover,
-                  errorBuilder: (_, _, _) => fallback)
+              ? Image.network(
+                  avatarUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => fallback,
+                )
               : fallback,
         ),
       ),

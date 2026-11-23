@@ -13,6 +13,7 @@ enum ReportFilter {
   high('Tinggi'),
   medium('Sedang'),
   low('Rendah'),
+  unassessed('Belum dinilai'),
   pending('Belum sinkron');
 
   const ReportFilter(this.label);
@@ -90,6 +91,7 @@ ReportData projectReportData(
       ReportFilter.high => record.riskLevel == RiskLevel.tinggi,
       ReportFilter.medium => record.riskLevel == RiskLevel.sedang,
       ReportFilter.low => record.riskLevel == RiskLevel.rendah,
+      ReportFilter.unassessed => record.riskLevel == RiskLevel.belumDinilai,
       ReportFilter.pending => !record.isSynced,
     };
     return matchesRisk && (needle.isEmpty || [

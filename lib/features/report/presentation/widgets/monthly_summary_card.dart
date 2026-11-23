@@ -22,16 +22,16 @@ class MonthlySummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(20),
+    padding: const EdgeInsets.all(18),
     decoration: BoxDecoration(
       color: AppColors.primary,
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: BorderRadius.circular(20),
     ),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text('Ringkasan inspeksi', style: TextStyle(
-          color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700,
+          color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700,
         )),
         const SizedBox(height: 5),
         Text(periodLabel, style: const TextStyle(
@@ -39,9 +39,9 @@ class MonthlySummaryCard extends StatelessWidget {
         )),
         const SizedBox(height: 18),
         LayoutBuilder(builder: (context, constraints) {
-          final columns = constraints.maxWidth >= 300 &&
+          final columns = constraints.maxWidth >= 360 &&
               MediaQuery.textScalerOf(context).scale(12) <= 15 ? 4 : 2;
-          final gap = columns == 4 ? 4.0 : 10.0;
+          const gap = 8.0;
           final width = (constraints.maxWidth - gap * (columns - 1)) / columns;
           return Wrap(
             spacing: gap, runSpacing: 10,
@@ -59,16 +59,20 @@ class MonthlySummaryCard extends StatelessWidget {
 
   Widget _stat(double width, int value, String label) => SizedBox(
     width: width,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(loading ? '—' : '$value', style: const TextStyle(
-            color: Colors.white, fontSize: 27, fontWeight: FontWeight.w700,
+            color: Colors.white, fontSize: 26, fontWeight: FontWeight.w700,
             height: 1.15,
           )),
-          const SizedBox(height: 7),
+          const SizedBox(height: 4),
           Text(label, style: const TextStyle(
             color: Color(0xFFE1EEE5), fontSize: 11, height: 1.4,
           )),

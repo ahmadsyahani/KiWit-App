@@ -41,7 +41,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen>
     if (state == AppLifecycleState.resumed) {
       setState(() {});
       _scheduleDay();
-      unawaited(refreshNotificationInspections(ref));
+      unawaited(refreshInspections(ref));
     } else {
       _dayTimer?.cancel();
     }
@@ -89,7 +89,7 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen>
       appBar: AppBar(title: const Text('Notifikasi')),
       body: RefreshIndicator(
         onRefresh: () async {
-          await refreshNotificationInspections(ref);
+          await refreshInspections(ref);
           if (mounted && ref.read(notificationControllerProvider).storageIssue != null) {
             final feed = ref.read(inspectionControllerProvider).valueOrNull;
             if (feed != null) await ref.read(notificationControllerProvider.notifier).receive(feed);

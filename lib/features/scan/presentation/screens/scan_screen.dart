@@ -105,7 +105,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
                 child: SizedBox(
                   width: math.min(space.maxWidth * .68, 280),
                   height: math.min(space.maxHeight * .82, 350),
-                  child: CustomPaint(painter: ScannerCornersPainter()),
+                  child: IgnorePointer(child: CustomPaint(painter: ScannerCornersPainter())),
                 ),
               )),
           ),
@@ -118,7 +118,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
                 Text(_title, textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
-                Text(_scan.notice ?? 'Isi bingkai dengan batang pohon. Pastikan foto fokus dan cukup terang.',
+                Text(_scan.notice ?? 'Dekatkan kamera ke batang dan bagian yang rusak.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: _scan.notice == null ? Colors.white70 : const Color(0xFFFFDFAC),
                       fontSize: 13, height: 1.5)),
@@ -181,18 +181,19 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
 class ScannerCornersPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white.withValues(alpha: .9)
-      ..strokeWidth = 3..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
-    final length = math.min(30.0, math.min(size.width, size.height) / 3);
+    final paint = Paint()..color = Colors.white.withValues(alpha: .72)
+      ..strokeWidth = 1.8..strokeCap = StrokeCap.round..style = PaintingStyle.stroke;
+    final length = math.min(24.0, math.min(size.width, size.height) / 3);
+    final radius = math.min(8.0, length / 2);
     final path = Path()
-      ..moveTo(0, length)..lineTo(0, 12)..quadraticBezierTo(0, 0, 12, 0)..lineTo(length, 0)
-      ..moveTo(size.width - length, 0)..lineTo(size.width - 12, 0)
-      ..quadraticBezierTo(size.width, 0, size.width, 12)..lineTo(size.width, length)
-      ..moveTo(size.width, size.height - length)..lineTo(size.width, size.height - 12)
-      ..quadraticBezierTo(size.width, size.height, size.width - 12, size.height)
+      ..moveTo(0, length)..lineTo(0, radius)..quadraticBezierTo(0, 0, radius, 0)..lineTo(length, 0)
+      ..moveTo(size.width - length, 0)..lineTo(size.width - radius, 0)
+      ..quadraticBezierTo(size.width, 0, size.width, radius)..lineTo(size.width, length)
+      ..moveTo(size.width, size.height - length)..lineTo(size.width, size.height - radius)
+      ..quadraticBezierTo(size.width, size.height, size.width - radius, size.height)
       ..lineTo(size.width - length, size.height)
-      ..moveTo(length, size.height)..lineTo(12, size.height)
-      ..quadraticBezierTo(0, size.height, 0, size.height - 12)..lineTo(0, size.height - length);
+      ..moveTo(length, size.height)..lineTo(radius, size.height)
+      ..quadraticBezierTo(0, size.height, 0, size.height - radius)..lineTo(0, size.height - length);
     canvas.drawPath(path, paint);
   }
   @override

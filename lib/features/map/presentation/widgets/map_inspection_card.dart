@@ -32,9 +32,9 @@ class MapInspectionCard extends StatelessWidget {
     color: Colors.white,
     elevation: 3,
     shadowColor: const Color(0x22094228),
-    borderRadius: BorderRadius.circular(24),
+    borderRadius: BorderRadius.circular(20),
     child: Padding(
-      padding: const EdgeInsets.fromLTRB(18, 8, 12, 16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -66,7 +66,7 @@ class MapInspectionCard extends StatelessWidget {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(14),
-                child: InspectionPhoto(record: marker.record, width: 60, height: 76),
+                child: InspectionPhoto(record: marker.record, width: 56, height: 64),
               ),
               const SizedBox(width: 12),
               Expanded(child: Column(
@@ -81,7 +81,7 @@ class MapInspectionCard extends StatelessWidget {
               )),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -133,11 +133,11 @@ class MapInspectionCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
           FilledButton(
             onPressed: onDetail,
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.primaryDark,
+              backgroundColor: AppColors.primary,
               minimumSize: const Size(0, 48),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

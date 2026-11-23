@@ -64,17 +64,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     super.dispose();
   }
 
-  Future<void> _refresh() async {
-    if (ref.read(inspectionControllerProvider).hasError) {
-      ref.invalidate(inspectionControllerProvider);
-      return;
-    }
-    try {
-      await ref.read(inspectionControllerProvider.notifier).refresh();
-    } catch (_) {
-      // The shared inspection provider exposes the error and keeps cached data.
-    }
-  }
+  Future<void> _refresh() => refreshInspections(ref);
 
   Future<void> _locateUser({bool initial = false}) async {
     if (_isLocating || !_mapReady) return;
@@ -342,7 +332,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         spacing: 8, runSpacing: 8,
                         children: [null, ...RiskLevel.values.reversed].map((level) =>
                           ChoiceChip(
-                            label: Text(_riskLabel(level)),
+                            label: Text(mapRiskLabel(level)),
                             selected: risk == level,
                             onSelected: (_) => update(() => risk = level),
                           ),
@@ -398,7 +388,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     final rayon = ref.watch(selectedRayonFilterProvider);
     final query = ref.watch(mapSearchQueryProvider);
     final guest = ref.watch(currentUserIdProvider) == null;
-    final hasFilter = risk != null || rayon != 'Semua Rayon' || query.trim().isNotEmpty;
+    final hasFilter = risk != null || rayon != 'Semua Rayon';
+    final canClearFilters = hasFilter || query.trim().isNotEmpty;
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     ref.listen(currentUserIdProvider, (_, _) {
@@ -460,7 +451,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                     rotate: true,
                     child: Semantics(
                       button: true,
-                      label: '${marker.speciesName}, ${_riskLabel(marker.riskLevel)}, '
+                      label: '${marker.speciesName}, ${mapRiskLabel(marker.riskLevel)}, '
                           'inspeksi ${marker.treeCode}',
                       child: GestureDetector(
                         onTap: () => _select(marker),
@@ -502,9 +493,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                 return Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
                       child: Center(child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 600),
+                        constraints: const BoxConstraints(maxWidth: 620),
                         child: MapSearchPanel(
                             controller: _searchController,
                             hasFilter: hasFilter,
@@ -530,7 +521,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                         child: Stack(
                           children: [
                             Positioned(
-                              top: 14, right: 16, bottom: 12,
+                              top: 10, right: 16, bottom: 12,
                               child: SingleChildScrollView(
                                 child: Column(
                                   children: [
@@ -542,9 +533,9 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                                         builder: (_) => const MapLayerSheet(),
                                       );
                                     }),
-                                    const SizedBox(height: 10),
+                                    const SizedBox(height: 8),
                                     _mapControl(LucideIcons.focus, 'Tampilkan semua hasil filter', _fitMarkers),
-                                    const SizedBox(height: 10),
+                                    const SizedBox(height: 8),
                                     _mapControl(
                                       _isLocating ? LucideIcons.loader2 : LucideIcons.locateFixed,
                                       'Lokasi saya', _locateUser, primary: true,
@@ -555,7 +546,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                             ),
                             if (!showMarkers)
                               Positioned(
-                                left: 16, top: 14, right: 80,
+                                left: 16, top: 10, right: 80,
                                 child: Material(
                                   color: Colors.white, borderRadius: BorderRadius.circular(14),
                                   child: TextButton(
@@ -595,7 +586,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
                                         onStartScan: _startInspection,
                                         onWithoutLocation: _showWithoutLocation,
                                         onShowList: _showInspectionList,
-                                        onClearFilters: hasFilter ? _clearFilters : null,
+                                        onClearFilters: canClearFilters ? _clearFilters : null,
                                       )),
                         )),
                       ),
@@ -629,7 +620,7 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
       {bool primary = false}) => Material(
     color: primary ? AppColors.primary : Colors.white,
     elevation: 2, shadowColor: const Color(0x22094228),
-    borderRadius: BorderRadius.circular(16),
+    borderRadius: BorderRadius.circular(14),
     child: IconButton(
       tooltip: tooltip, onPressed: action,
       icon: Icon(icon, color: primary ? Colors.white : AppColors.primary, size: 21),
@@ -637,15 +628,8 @@ class _MapScreenState extends ConsumerState<MapScreen> with WidgetsBindingObserv
     ),
   );
 
-  String _riskLabel(RiskLevel? risk) => switch (risk) {
-    null => 'Semua',
-    RiskLevel.rendah => 'Rendah',
-    RiskLevel.sedang => 'Sedang',
-    RiskLevel.tinggi => 'Tinggi',
-    RiskLevel.kritis => 'Kritis',
-  };
-
   Color _riskColor(RiskLevel risk) => switch (risk) {
+    RiskLevel.belumDinilai => const Color(0xFF687780),
     RiskLevel.rendah => AppColors.primary,
     RiskLevel.sedang => const Color(0xFFD97706),
     RiskLevel.tinggi => const Color(0xFFEA580C),
